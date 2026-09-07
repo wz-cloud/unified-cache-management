@@ -1,0 +1,126 @@
+root@gpu-2:/workspace-genet/unified-cache-management# python3 test/debug_qwen25_store.py  --mode cuda --device 7  --storage-parent /workspace-genet/test/
+BEGIN import native store
+END import native store: 1.773s
+Isolated storage (retained): /workspace-genet/test/ucm-qwen25-tj57x295
+BEGIN allocate shared CUDA KV backing
+KV allocation: 48.0 MiB
+END allocate shared CUDA KV backing: 0.479s
+BEGIN create real worker Cache|Posix
+[2026-09-07 19:38:46.896147][UC][I] PosixStore-(Release). [144900,144900][posix_store.cc:328,ShowConfig]
+[2026-09-07 19:38:46.896193][UC][I] Set PosixStore::StorageBackends to ["/workspace-genet/test/ucm-qwen25-tj57x295"]. [144900,144900][posix_store.cc:329,ShowConfig]
+[2026-09-07 19:38:46.896202][UC][I] Set PosixStore::DeviceId to 7. [144900,144900][posix_store.cc:330,ShowConfig]
+[2026-09-07 19:38:46.896206][UC][I] Set PosixStore::TensorSize to 262144. [144900,144900][posix_store.cc:331,ShowConfig]
+[2026-09-07 19:38:46.896209][UC][I] Set PosixStore::ShardSize to 262144. [144900,144900][posix_store.cc:332,ShowConfig]
+[2026-09-07 19:38:46.896210][UC][I] Set PosixStore::BlockSize to 12582912. [144900,144900][posix_store.cc:333,ShowConfig]
+[2026-09-07 19:38:46.896212][UC][I] Set PosixStore::IoEngine to psync. [144900,144900][posix_store.cc:334,ShowConfig]
+[2026-09-07 19:38:46.896215][UC][I] Set PosixStore::IoDirect to true. [144900,144900][posix_store.cc:335,ShowConfig]
+[2026-09-07 19:38:46.896218][UC][I] Set PosixStore::CpuAffinityCores to []. [144900,144900][posix_store.cc:336,ShowConfig]
+[2026-09-07 19:38:46.896221][UC][I] Set PosixStore::DataTransConcurrency to 2. [144900,144900][posix_store.cc:337,ShowConfig]
+[2026-09-07 19:38:46.896222][UC][I] Set PosixStore::LookupConcurrency to 2. [144900,144900][posix_store.cc:338,ShowConfig]
+[2026-09-07 19:38:46.896224][UC][I] Set PosixStore::OpenConcurrency to 32. [144900,144900][posix_store.cc:339,ShowConfig]
+[2026-09-07 19:38:46.896228][UC][I] Set PosixStore::CommitConcurrency to 4. [144900,144900][posix_store.cc:340,ShowConfig]
+[2026-09-07 19:38:46.896230][UC][I] Set PosixStore::TimeoutMs to 30000. [144900,144900][posix_store.cc:341,ShowConfig]
+[2026-09-07 19:38:46.896232][UC][I] Set PosixStore::DataDirShardBytes to 3. [144900,144900][posix_store.cc:342,ShowConfig]
+[2026-09-07 19:38:46.896440][UC][I] Started store health breaker(pipeline/0:PosixStore). [144900,144900][health_breaker_store.cc:60,Start]
+[2026-09-07 19:38:47.448677][UC][I] CacheStore-(Release). [144900,144900][cache_store.cc:241,ShowConfig]
+[2026-09-07 19:38:47.448698][UC][I] Set CacheStore::StoreBackend to HealthBreakerStore(pipeline/0:PosixStore). [144900,144900][cache_store.cc:242,ShowConfig]
+[2026-09-07 19:38:47.448700][UC][I] Set CacheStore::UniqueId to 18477f2c87da6e175db74e2634ee081a. [144900,144900][cache_store.cc:243,ShowConfig]
+[2026-09-07 19:38:47.448702][UC][I] Set CacheStore::CacheLoadBackendOnly to true. [144900,144900][cache_store.cc:244,ShowConfig]
+[2026-09-07 19:38:47.448704][UC][I] Set CacheStore::DeviceId to 7. [144900,144900][cache_store.cc:245,ShowConfig]
+[2026-09-07 19:38:47.448709][UC][I] Set CacheStore::TensorSizes to 262144(*1). [144900,144900][cache_store.cc:250,ShowConfig]
+[2026-09-07 19:38:47.448722][UC][I] Set CacheStore::ShardSize to 262144. [144900,144900][cache_store.cc:254,ShowConfig]
+[2026-09-07 19:38:47.448724][UC][I] Set CacheStore::BlockSize to 12582912. [144900,144900][cache_store.cc:255,ShowConfig]
+[2026-09-07 19:38:47.448724][UC][I] Set CacheStore::IoDirect to true. [144900,144900][cache_store.cc:256,ShowConfig]
+[2026-09-07 19:38:47.448727][UC][I] Set CacheStore::CpuAffinityCores to []. [144900,144900][cache_store.cc:257,ShowConfig]
+[2026-09-07 19:38:47.448728][UC][I] Set CacheStore::BufferCapacity to 1GB. [144900,144900][cache_store.cc:258,ShowConfig]
+[2026-09-07 19:38:47.448729][UC][I] Set CacheStore::ShareBufferEnable to false. [144900,144900][cache_store.cc:259,ShowConfig]
+[2026-09-07 19:38:47.448730][UC][I] Set CacheStore::CacheIOAggregation to false. [144900,144900][cache_store.cc:260,ShowConfig]
+[2026-09-07 19:38:47.448731][UC][I] Set CacheStore::WaitingQueueDepth to 128. [144900,144900][cache_store.cc:264,ShowConfig]
+[2026-09-07 19:38:47.448731][UC][I] Set CacheStore::RunningQueueDepth to 128. [144900,144900][cache_store.cc:265,ShowConfig]
+[2026-09-07 19:38:47.448733][UC][I] Set CacheStore::TimeoutMs to 30000. [144900,144900][cache_store.cc:266,ShowConfig]
+[2026-09-07 19:38:47.448734][UC][I] Set CacheStore::StreamNumber to 4. [144900,144900][cache_store.cc:272,ShowConfig]
+[2026-09-07 19:38:47.448735][UC][I] Set CacheStore::CacheSdmaDirect to false. [144900,144900][cache_store.cc:274,ShowConfig]
+[2026-09-07 19:38:47.448736][UC][I] Set CacheStore::LoadExclusiveBufferNumber to 4. [144900,144900][cache_store.cc:275,ShowConfig]
+END create real worker Cache|Posix: 7.960s
+[2026-09-07 19:38:47.448736][UC][I] Set CacheStore::GpuKvBufferNumber to 1. [144900,144900][cache_store.cc:276,ShowConfig]
+[2026-09-07 19:38:47.448737][UC][I] Set CacheStore::UseGdr to false. [144900,144900][cache_store.cc:277,ShowConfig]
+[2026-09-07 19:38:47.448738][UC][I] Set CacheStore::LocalRankSize to 1. [144900,144900][cache_store.cc:278,ShowConfig]
+[2026-09-07 19:38:47.448824][UC][I] Started store health breaker(pipeline/1:CacheStore). [144900,144900][health_breaker_store.cc:60,Start]
+BEGIN create real scheduler Cache|Posix (GC enabled)
+[2026-09-07 19:38:48.403086][UC][I] PosixStore-(Release). [144900,144900][posix_store.cc:328,ShowConfig]
+[2026-09-07 19:38:48.403107][UC][I] Set PosixStore::StorageBackends to ["/workspace-genet/test/ucm-qwen25-tj57x295"]. [144900,144900][posix_store.cc:329,ShowConfig]
+[2026-09-07 19:38:48.403110][UC][I] Set PosixStore::DeviceId to -1. [144900,144900][posix_store.cc:330,ShowConfig]
+[2026-09-07 19:38:48.403112][UC][I] Set PosixStore::TensorSize to 0. [144900,144900][posix_store.cc:331,ShowConfig]
+[2026-09-07 19:38:48.403115][UC][I] Set PosixStore::ShardSize to 0. [144900,144900][posix_store.cc:332,ShowConfig]
+[2026-09-07 19:38:48.403117][UC][I] Set PosixStore::BlockSize to 12582912. [144900,144900][posix_store.cc:333,ShowConfig]
+[2026-09-07 19:38:48.403118][UC][I] Set PosixStore::IoEngine to psync. [144900,144900][posix_store.cc:334,ShowConfig]
+[2026-09-07 19:38:48.403121][UC][I] Set PosixStore::IoDirect to true. [144900,144900][posix_store.cc:335,ShowConfig]
+[2026-09-07 19:38:48.403122][UC][I] Set PosixStore::CpuAffinityCores to []. [144900,144900][posix_store.cc:336,ShowConfig]
+[2026-09-07 19:38:48.403124][UC][I] Set PosixStore::DataTransConcurrency to 2. [144900,144900][posix_store.cc:337,ShowConfig]
+[2026-09-07 19:38:48.403125][UC][I] Set PosixStore::LookupConcurrency to 2. [144900,144900][posix_store.cc:338,ShowConfig]
+[2026-09-07 19:38:48.403129][UC][I] Set PosixStore::OpenConcurrency to 32. [144900,144900][posix_store.cc:339,ShowConfig]
+[2026-09-07 19:38:48.403130][UC][I] Set PosixStore::CommitConcurrency to 4. [144900,144900][posix_store.cc:340,ShowConfig]
+[2026-09-07 19:38:48.403132][UC][I] Set PosixStore::TimeoutMs to 30000. [144900,144900][posix_store.cc:341,ShowConfig]
+[2026-09-07 19:38:48.403133][UC][I] Set PosixStore::DataDirShardBytes to 3. [144900,144900][posix_store.cc:342,ShowConfig]
+[2026-09-07 19:38:48.403135][UC][I] Set PosixStore::PosixGcEnable to true. [144900,144900][posix_store.cc:344,ShowConfig]
+[2026-09-07 19:38:48.403136][UC][I] Set PosixStore::PosixCapacityGb to 720. [144900,144900][posix_store.cc:345,ShowConfig]
+[2026-09-07 19:38:48.403143][UC][I] Set PosixStore::PosixGcRecyclePercent to 0.1. [144900,144900][posix_store.cc:346,ShowConfig]
+[2026-09-07 19:38:48.403145][UC][I] Set PosixStore::PosixGcPreciseMode to true. [144900,144900][posix_store.cc:347,ShowConfig]
+[2026-09-07 19:38:48.403146][UC][I] Set PosixStore::PosixGcCandidateExtraPercent to 0.1. [144900,144900][posix_store.cc:349,ShowConfig]
+[2026-09-07 19:38:48.403147][UC][I] Set PosixStore::PosixGcConcurrency to 2. [144900,144900][posix_store.cc:352,ShowConfig]
+[2026-09-07 19:38:48.403151][UC][I] Set PosixStore::PosixGcCheckIntervalSec to 5. [144900,144900][posix_store.cc:353,ShowConfig]
+[2026-09-07 19:38:48.403153][UC][I] Set PosixStore::PosixGcTriggerThresholdRatio to 0.7. [144900,144900][posix_store.cc:354,ShowConfig]
+[2026-09-07 19:38:48.403154][UC][I] Set PosixStore::PosixGcMaxRecycleCountPerShard to 50000. [144900,144900][posix_store.cc:356,ShowConfig]
+[2026-09-07 19:38:48.403156][UC][I] Set PosixStore::PosixGcShardSampleRatio to 0.1. [144900,144900][posix_store.cc:358,ShowConfig]
+[2026-09-07 19:38:48.403157][UC][I] Set PosixStore::PosixGcTaskTimeoutMs to 300000. [144900,144900][posix_store.cc:359,ShowConfig]
+[2026-09-07 19:38:48.403158][UC][I] Set PosixStore::PosixGcCrossInstanceLock to true. [144900,144900][posix_store.cc:360,ShowConfig]
+[2026-09-07 19:38:48.403158][UC][I] Set PosixStore::PosixGcHeartbeatIntervalSec to 1. [144900,144900][posix_store.cc:362,ShowConfig]
+[2026-09-07 19:38:48.403159][UC][I] Set PosixStore::PosixGcStaleThresholdSec to 60. [144900,144900][posix_store.cc:364,ShowConfig]
+[2026-09-07 19:38:48.403259][UC][I] Started store health breaker(pipeline/0:PosixStore). [144900,144900][health_breaker_store.cc:60,Start]
+[2026-09-07 19:38:48.403508][UC][I] CacheStore-(Release). [144900,144900][cache_store.cc:241,ShowConfig]
+[2026-09-07 19:38:48.403516][UC][I] Set CacheStore::StoreBackend to HealthBreakerStore(pipeline/0:PosixStore). [144900,144900][cache_store.cc:242,ShowConfig]
+[2026-09-07 19:38:48.403519][UC][I] Set CacheStore::UniqueId to 18477f2c87da6e175db74e2634ee081a. [144900,144900][cache_store.cc:243,ShowConfig]
+[2026-09-07 19:38:48.403522][UC][I] Set CacheStore::CacheLoadBackendOnly to true. [144900,144900][cache_store.cc:244,ShowConfig]
+[2026-09-07 19:38:48.403524][UC][I] Set CacheStore::DeviceId to -1. [144900,144900][cache_store.cc:245,ShowConfig]
+[2026-09-07 19:38:48.403527][UC][I] Set CacheStore::TensorSizes to []. [144900,144900][cache_store.cc:248,ShowConfig]
+[2026-09-07 19:38:48.403533][UC][I] Set CacheStore::ShardSize to 0. [144900,144900][cache_store.cc:254,ShowConfig]
+[2026-09-07 19:38:48.403534][UC][I] Set CacheStore::BlockSize to 12582912. [144900,144900][cache_store.cc:255,ShowConfig]
+[2026-09-07 19:38:48.403535][UC][I] Set CacheStore::IoDirect to true. [144900,144900][cache_store.cc:256,ShowConfig]
+[2026-09-07 19:38:48.403539][UC][I] Set CacheStore::CpuAffinityCores to []. [144900,144900][cache_store.cc:257,ShowConfig]
+[2026-09-07 19:38:48.403541][UC][I] Set CacheStore::BufferCapacity to 1GB. [144900,144900][cache_store.cc:258,ShowConfig]
+[2026-09-07 19:38:48.403549][UC][I] Set CacheStore::ShareBufferEnable to false. [144900,144900][cache_store.cc:259,ShowConfig]
+[2026-09-07 19:38:48.403550][UC][I] Set CacheStore::CacheIOAggregation to false. [144900,144900][cache_store.cc:260,ShowConfig]
+[2026-09-07 19:38:48.403552][UC][I] Set CacheStore::WaitingQueueDepth to 128. [144900,144900][cache_store.cc:264,ShowConfig]
+END create real scheduler Cache|Posix (GC enabled): 0.955s
+[2026-09-07 19:38:48.403553][UC][I] Set CacheStore::RunningQueueDepth to 128. [144900,144900][cache_store.cc:265,ShowConfig]
+[2026-09-07 19:38:48.403554][UC][I] Set CacheStore::TimeoutMs to 30000. [144900,144900][cache_store.cc:266,ShowConfig]
+[2026-09-07 19:38:48.403555][UC][I] Set CacheStore::StreamNumber to 4. [144900,144900][cache_store.cc:272,ShowConfig]
+BEGIN scheduler lookup: fresh IDs must miss
+[2026-09-07 19:38:48.403556][UC][I] Set CacheStore::CacheSdmaDirect to false. [144900,144900][cache_store.cc:274,ShowConfig]
+[2026-09-07 19:38:48.403557][UC][I] Set CacheStore::LoadExclusiveBufferNumber to 4. [144900,144900][cache_store.cc:275,ShowConfig]
+[2026-09-07 19:38:48.403560][UC][I] Set CacheStore::GpuKvBufferNumber to 0. [144900,144900][cache_store.cc:276,ShowConfig]
+[2026-09-07 19:38:48.403562][UC][I] Set CacheStore::UseGdr to false. [144900,144900][cache_store.cc:277,ShowConfig]
+[2026-09-07 19:38:48.403565][UC][I] Set CacheStore::LocalRankSize to 1. [144900,144900][cache_store.cc:278,ShowConfig]
+END scheduler lookup: fresh IDs must miss: 0.001s
+BEGIN dump all 48 layer shards
+[2026-09-07 19:38:48.408698][UC][I] Acquired GC lock(/workspace-genet/test/ucm-qwen25-tj57x295/.ucm_gc.lock) as hb.gpu-2.144900.626878a2. [144900,145068][gc_lease.cc:149,Claim]
+END dump all 48 layer shards: 0.013s
+BEGIN scheduler lookup: all blocks must exist
+FAIL scheduler lookup: all blocks must exist
+BEGIN destroy worker and scheduler stores
+[2026-09-07 19:38:48.419061][UC][I] Stopped store health breaker(pipeline/0:PosixStore). [144900,144900][health_breaker_store.cc:73,Stop]
+[2026-09-07 19:38:48.419152][UC][I] Stopped store health breaker(pipeline/1:CacheStore). [144900,144900][health_breaker_store.cc:73,Stop]
+[2026-09-07 19:38:48.535087][UC][E] Failed(-50002, 14) to write file(/workspace-genet/test/ucm-qwen25-tj57x295/d8d/d8da13d0b86940cefa88f2598dc6de9f.tmp:5242880). [144900,145042][trans_queue.cc:156,H2S]
+[2026-09-07 19:38:48.535089][UC][E] Failed(-50002, 14) to write file(/workspace-genet/test/ucm-qwen25-tj57x295/45d/45d79f98057f9236f681ec1bc38980b1.tmp:5242880). [144900,145043][trans_queue.cc:156,H2S]
+[2026-09-07 19:38:48.535912][UC][E] Failed(-50002, 14) to write file(/workspace-genet/test/ucm-qwen25-tj57x295/d8d/d8da13d0b86940cefa88f2598dc6de9f.tmp:5505024). [144900,145043][trans_queue.cc:156,H2S]
+[2026-09-07 19:38:48.600751][UC][I] GC sampling: avgFiles/shard=0, threshold=10, trigger=false [144900,145068][shard_gc.cc:131,RunGcCycle]
+[2026-09-07 19:38:48.602991][UC][I] Released GC lock(/workspace-genet/test/ucm-qwen25-tj57x295/.ucm_gc.lock). [144900,145068][gc_lease.cc:321,Release]
+[2026-09-07 19:38:50.895675][UC][I] Stopped store health breaker(pipeline/0:PosixStore). [144900,144900][health_breaker_store.cc:73,Stop]
+END destroy worker and scheduler stores: 3.094s
+Traceback (most recent call last):
+  File "/workspace-genet/unified-cache-management/test/debug_qwen25_store.py", line 149, in <module>
+    main()
+  File "/workspace-genet/unified-cache-management/test/debug_qwen25_store.py", line 121, in main
+    raise AssertionError("Not all dumped blocks are visible")
+AssertionError: Not all dumped blocks are visible
+root@gpu-2:/workspace-genet/unified-cache-management# 
