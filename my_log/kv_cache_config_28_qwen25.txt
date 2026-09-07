@@ -1,0 +1,72 @@
+KVCacheConfig(num_blocks=3057, kv_cache_tensors=[KVCacheTensor(size=4808245248, layers=['model.layers.0.self_attn.attn', 'model.layers.1.self_attn.attn', 'model.layers.2.self_attn.attn', 'model.layers.3.self_attn.attn', 'model.layers.4.self_attn.attn', 'model.layers.5.self_attn.attn', 'model.layers.6.self_attn.attn', 'model.layers.7.self_attn.attn', 'model.layers.8.self_attn.attn', 'model.layers.9.self_attn.attn', 'model.layers.10.self_attn.attn', 'model.layers.11.self_attn.attn', 'model.layers.12.self_attn.attn', 'model.layers.13.self_attn.attn', 'model.layers.14.self_attn.attn', 'model.layers.15.self_attn.attn', 'model.layers.16.self_attn.attn', 'model.layers.17.self_attn.attn', 'model.layers.18.self_attn.attn', 'model.layers.19.self_attn.attn', 'model.layers.20.self_attn.attn', 'model.layers.21.self_attn.attn', 'model.layers.22.self_attn.attn', 'model.layers.23.self_attn.attn', 'model.layers.24.self_attn.attn', 'model.layers.25.self_attn.attn', 'model.layers.26.self_attn.attn', 'model.layers.27.self_attn.attn', 'model.layers.28.self_attn.attn', 'model.layers.29.self_attn.attn', 'model.layers.30.self_attn.attn', 'model.layers.31.self_attn.attn', 'model.layers.32.self_attn.attn', 'model.layers.33.self_attn.attn', 'model.layers.34.self_attn.attn', 'model.layers.35.self_attn.attn', 'model.layers.36.self_attn.attn', 'model.layers.37.self_attn.attn', 'model.layers.38.self_attn.attn', 'model.layers.39.self_attn.attn', 'model.layers.40.self_attn.attn', 'model.layers.41.self_attn.attn', 'model.layers.42.self_attn.attn', 'model.layers.43.self_attn.attn', 'model.layers.44.self_attn.attn', 'model.layers.45.self_attn.attn', 'model.layers.46.self_attn.attn', 'model.layers.47.self_attn.attn'], layer_stride=100171776, block_stride=32768, offset=0)], kv_cache_groups=[KVCacheGroupSpec(layer_names=['model.layers.0.self_attn.attn', 'model.layers.1.self_attn.attn', 'model.layers.2.self_attn.attn', 'model.layers.3.self_attn.attn', 'model.layers.4.self_attn.attn', 'model.layers.5.self_attn.attn', 'model.layers.6.self_attn.attn', 'model.layers.7.self_attn.attn', 'model.layers.8.self_attn.attn', 'model.layers.9.self_attn.attn', 'model.layers.10.self_attn.attn', 'model.layers.11.self_attn.attn', 'model.layers.12.self_attn.attn', 'model.layers.13.self_attn.attn', 'model.layers.14.self_attn.attn', 'model.layers.15.self_attn.attn', 'model.layers.16.self_attn.attn', 'model.layers.17.self_attn.attn', 'model.layers.18.self_attn.attn', 'model.layers.19.self_attn.attn', 'model.layers.20.self_attn.attn', 'model.layers.21.self_attn.attn', 'model.layers.22.self_attn.attn', 'model.layers.23.self_attn.attn', 'model.layers.24.self_attn.attn', 'model.layers.25.self_attn.attn', 'model.layers.26.self_attn.attn', 'model.layers.27.self_attn.attn', 'model.layers.28.self_attn.attn', 'model.layers.29.self_attn.attn', 'model.layers.30.self_attn.attn', 'model.layers.31.self_attn.attn', 'model.layers.32.self_attn.attn', 'model.layers.33.self_attn.attn', 'model.layers.34.self_attn.attn', 'model.layers.35.self_attn.attn', 'model.layers.36.self_attn.attn', 'model.layers.37.self_attn.attn', 'model.layers.38.self_attn.attn', 'model.layers.39.self_attn.attn', 'model.layers.40.self_attn.attn', 'model.layers.41.self_attn.attn', 'model.layers.42.self_attn.attn', 'model.layers.43.self_attn.attn', 'model.layers.44.self_attn.attn', 'model.layers.45.self_attn.attn', 'model.layers.46.self_attn.attn', 'model.layers.47.self_attn.attn'], kv_cache_spec=FullAttentionSpec(block_size=64, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=128, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), is_eagle_group=False, enable_kv_transfer=True)], prefix_cache_retention_interval=0, kv_cache_layout='LBNHC')
+KVCacheConfig(
+    num_blocks=3057, 
+    kv_cache_tensors=[
+        KVCacheTensor(
+            size=4808245248, 
+            layers=[
+                'model.layers.0.self_attn.attn', 'model.layers.1.self_attn.attn', 'model.layers.2.self_attn.attn', 
+                'model.layers.3.self_attn.attn', 'model.layers.4.self_attn.attn', 'model.layers.5.self_attn.attn', 
+                'model.layers.6.self_attn.attn', 'model.layers.7.self_attn.attn', 'model.layers.8.self_attn.attn', 
+                'model.layers.9.self_attn.attn', 'model.layers.10.self_attn.attn', 'model.layers.11.self_attn.attn', 
+                'model.layers.12.self_attn.attn', 'model.layers.13.self_attn.attn', 'model.layers.14.self_attn.attn', 
+                'model.layers.15.self_attn.attn', 'model.layers.16.self_attn.attn', 'model.layers.17.self_attn.attn', 
+                'model.layers.18.self_attn.attn', 'model.layers.19.self_attn.attn', 'model.layers.20.self_attn.attn', 
+                'model.layers.21.self_attn.attn', 'model.layers.22.self_attn.attn', 'model.layers.23.self_attn.attn', 
+                'model.layers.24.self_attn.attn', 'model.layers.25.self_attn.attn', 'model.layers.26.self_attn.attn', 
+                'model.layers.27.self_attn.attn', 'model.layers.28.self_attn.attn', 'model.layers.29.self_attn.attn', 
+                'model.layers.30.self_attn.attn', 'model.layers.31.self_attn.attn', 'model.layers.32.self_attn.attn', 
+                'model.layers.33.self_attn.attn', 'model.layers.34.self_attn.attn', 'model.layers.35.self_attn.attn', 
+                'model.layers.36.self_attn.attn', 'model.layers.37.self_attn.attn', 'model.layers.38.self_attn.attn', 
+                'model.layers.39.self_attn.attn', 'model.layers.40.self_attn.attn', 'model.layers.41.self_attn.attn', 
+                'model.layers.42.self_attn.attn', 'model.layers.43.self_attn.attn', 'model.layers.44.self_attn.attn', 
+                'model.layers.45.self_attn.attn', 'model.layers.46.self_attn.attn', 'model.layers.47.self_attn.attn'
+            ], 
+            layer_stride=100171776, 
+            block_stride=32768, 
+            offset=0
+        )
+    ], 
+    kv_cache_groups=[
+        KVCacheGroupSpec(
+            layer_names=[
+                'model.layers.0.self_attn.attn', 'model.layers.1.self_attn.attn', 
+                'model.layers.2.self_attn.attn', 'model.layers.3.self_attn.attn', 'model.layers.4.self_attn.attn', 
+                'model.layers.5.self_attn.attn', 'model.layers.6.self_attn.attn', 'model.layers.7.self_attn.attn', 
+                'model.layers.8.self_attn.attn', 'model.layers.9.self_attn.attn', 'model.layers.10.self_attn.attn', 
+                'model.layers.11.self_attn.attn', 'model.layers.12.self_attn.attn', 'model.layers.13.self_attn.attn', 
+                'model.layers.14.self_attn.attn', 'model.layers.15.self_attn.attn', 'model.layers.16.self_attn.attn', 
+                'model.layers.17.self_attn.attn', 'model.layers.18.self_attn.attn', 'model.layers.19.self_attn.attn', 
+                'model.layers.20.self_attn.attn', 'model.layers.21.self_attn.attn', 'model.layers.22.self_attn.attn', 
+                'model.layers.23.self_attn.attn', 'model.layers.24.self_attn.attn', 'model.layers.25.self_attn.attn', 
+                'model.layers.26.self_attn.attn', 'model.layers.27.self_attn.attn', 'model.layers.28.self_attn.attn', 
+                'model.layers.29.self_attn.attn', 'model.layers.30.self_attn.attn', 'model.layers.31.self_attn.attn', 
+                'model.layers.32.self_attn.attn', 'model.layers.33.self_attn.attn', 'model.layers.34.self_attn.attn', 
+                'model.layers.35.self_attn.attn', 'model.layers.36.self_attn.attn', 'model.layers.37.self_attn.attn', 
+                'model.layers.38.self_attn.attn', 'model.layers.39.self_attn.attn', 'model.layers.40.self_attn.attn', 
+                'model.layers.41.self_attn.attn', 'model.layers.42.self_attn.attn', 'model.layers.43.self_attn.attn', 
+                'model.layers.44.self_attn.attn', 'model.layers.45.self_attn.attn', 'model.layers.46.self_attn.attn', 
+                'model.layers.47.self_attn.attn'
+            ], 
+            kv_cache_spec=FullAttentionSpec(
+                block_size=64, 
+                num_kv_heads=1, 
+                head_size=128, 
+                dtype=torch.bfloat16, 
+                head_size_v=128, 
+                kv_quant_mode=<KVQuantMode.NONE: 0>, 
+                page_size_padded=None, 
+                num_head_slots=None, 
+                state_content_bytes=None, 
+                tokens_per_state=1, 
+                sliding_window=None, 
+                attention_chunk_size=None, 
+                non_causal=False
+            ), 
+            is_eagle_group=False, 
+            enable_kv_transfer=True
+        )
+    ],
+    prefix_cache_retention_interval=0, 
+    kv_cache_layout='LBNHC'
+)
