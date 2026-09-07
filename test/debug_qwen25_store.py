@@ -38,9 +38,13 @@ def main():
                         help="KV head partition only; does not launch TP processes.")
     parser.add_argument("--observe-seconds", type=int, default=35)
     parser.add_argument("--trace-seconds", type=int, default=60)
+    parser.add_argument("--visibility-timeout", type=float, default=60,
+                        help="Seconds to wait for asynchronous backend commits.")
     args = parser.parse_args()
     if args.observe_seconds < 0 or args.trace_seconds <= 0:
         parser.error("observe-seconds must be >= 0; trace-seconds must be > 0")
+    if args.visibility_timeout <= 0:
+        parser.error("visibility-timeout must be > 0")
     if args.mode == "cpu":
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
     faulthandler.enable()
@@ -68,7 +72,7 @@ def main():
             "cache_load_backend_only": True,
             "waiting_queue_depth": 128,
             "running_queue_depth": 128,
-            "stream_number": 1,
+            "cache_stream_number": 1,
             "timeout_ms": 30000,
             "io_direct": True,
             "posix_io_engine": "psync",
@@ -117,8 +121,24 @@ def main():
                     addresses = [[tensor[b].data_ptr()] for b in range(4)]
                     worker.wait(worker.dump_data(ids, [i] * 4, addresses))
             with stage("scheduler lookup: all blocks must exist"):
-                if not all(scheduler.lookup(ids)):
-                    raise AssertionError("Not all dumped blocks are visible")
+                # Cache wait covers D2H and backend submission, not commit.
+                deadline = time.monotonic() + args.visibility_timeout
+                previous = None
+                while True:
+                    found = list(scheduler.lookup(ids))
+                    count = sum(bool(value) for value in found)
+                    if count != previous:
+                        print(f"Committed blocks: {count}/{len(ids)}", flush=True)
+                        previous = count
+                    if all(found):
+                        break
+                    if time.monotonic() >= deadline:
+                        missing = [key.hex() for key, hit in zip(ids, found) if not hit]
+                        raise TimeoutError(
+                            f"Backend visibility timeout; missing={missing}; "
+                            f"inspect native write errors and {directory}"
+                        )
+                    time.sleep(0.1)
             with stage("clear GPU cache and load from backend"):
                 backing.zero_()
                 torch.cuda.synchronize()
