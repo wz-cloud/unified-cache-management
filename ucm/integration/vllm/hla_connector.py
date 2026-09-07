@@ -772,20 +772,26 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
         ):
             return False
 
-        layer_to_specs = layer_name_to_kv_cache_spec(kv_cache_config)
-        for raw_tensor in kv_cache_config.kv_cache_tensors:
-            shared_specs = [
-                spec
-                for layer_name in raw_tensor.shared_by
-                for spec in layer_to_specs.get(layer_name, [])
-            ]
-            if any(
-                isinstance(spec, FullAttentionSpec) for spec in shared_specs
-            ) and any(
-                isinstance(spec, MambaSpec) and spec.mamba_cache_mode == "align"
-                for spec in shared_specs
-            ):
-                return True
+        has_full_attention = False
+        has_mamba = False
+
+        for group in kv_cache_config.kv_cache_groups:
+            if not getattr(group, "enable_kv_transfer", True):
+                continue
+
+            group_spec = group.kv_cache_spec
+            if isinstance(group_spec, UniformTypeKVCacheSpecs):
+                specs = group_spec.kv_cache_specs.values()
+            else:
+                specs = (group_spec,)
+
+            for spec in specs:
+                has_full_attention = has_full_attention or isinstance(
+                    spec, FullAttentionSpec
+                )
+                has_mamba = has_mamba or isinstance(spec, MambaSpec)
+                if has_full_attention and has_mamba:
+                    return True
 
         return False
 
