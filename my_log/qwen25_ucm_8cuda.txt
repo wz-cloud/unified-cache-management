@@ -555,3 +555,12 @@ Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:01<00:00,  5.50i
 [Tue Sep  8 12:48:08 2026] oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=cri-containerd-549cfbcf37fe22fed45b5d45458725008cee39832a38bbf9e8b09eb80f633dca.scope,mems_allowed=0-1,oom_memcg=/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod410631af_258a_453b_a011_2f9128569133.slice,task_memcg=/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod410631af_258a_453b_a011_2f9128569133.slice/cri-containerd-549cfbcf37fe22fed45b5d45458725008cee39832a38bbf9e8b09eb80f633dca.scope,task=VLLM::Worker_TP,pid=2781913,uid=0
 [Tue Sep  8 12:48:08 2026] Memory cgroup out of memory: Killed process 2781913 (VLLM::Worker_TP) total-vm:350436280kB, anon-rss:1672176kB, file-rss:613296kB, shmem-rss:32393784kB, UID:0 pgtables:73512kB oom_score_adj:937
 [Tue Sep  8 12:48:08 2026] Cannot map memory with base addr 0x7f68e0000000 and size of 0x800000 pages
+
+
+root@gpu-2:/workspace-genet# cat /sys/fs/cgroup/memory.max 
+274877906944
+root@gpu-2:/workspace-genet# cat /sys/fs/cgroup/memory.current 
+47593353216
+root@gpu-2:/workspace-genet# df -h /dev/shm/
+Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           128G  468K  128G   1% /dev/shm
