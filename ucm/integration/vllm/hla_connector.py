@@ -109,6 +109,17 @@ def is_mamba_align_kv_cache_spec(spec: KVCacheSpec) -> bool:
     return isinstance(spec, MambaSpec) and spec.mamba_cache_mode == "align"
 
 
+def kv_cache_tensor_layer_names(raw_tensor) -> tuple[str, ...]:
+    """Read layer names from the new ``layers`` or legacy ``shared_by`` field."""
+    layers = getattr(raw_tensor, "layers", None)
+    if layers:
+        return tuple(layers)
+    shared_by = getattr(raw_tensor, "shared_by", None)
+    if shared_by:
+        return tuple(shared_by)
+    return ()
+
+
 def extend_non_null(
     dst_ucm_block_ids: list[bytes],
     dst_vllm_block_ids: list[int],
@@ -546,13 +557,13 @@ class HybridLinearAttentionLayout(KVCacheLayout):
 
     def _collect_shared_tensor_info(
         self,
-        raw_tensor,
         kvcaches,
+        layer_names: tuple[str, ...],
     ) -> tuple[list[KVCacheSpec], list[int]]:
         shared_specs: list[KVCacheSpec] = []
         shared_ptrs: list[int] = []
         layer_to_specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
-        for layer_name in raw_tensor.shared_by:
+        for layer_name in layer_names:
             kv_layer = kvcaches.get(layer_name)
             if kv_layer is None:
                 continue
@@ -693,16 +704,18 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         is_npu = current_platform.device_type == "npu"
 
         for raw_tensor in self.kv_cache_config.kv_cache_tensors:
-            if not raw_tensor.shared_by:
+            layer_names = kv_cache_tensor_layer_names(raw_tensor)
+            if not layer_names:
                 continue
 
             shared_specs, shared_ptrs = self._collect_shared_tensor_info(
-                raw_tensor, kvcaches
+                kvcaches, layer_names
             )
 
             if not shared_ptrs:
                 logger.warning(
-                    f"no kv cache tensor found for shared layers {raw_tensor.shared_by}"
+                    "no kv cache tensor found for hybrid layers %s",
+                    layer_names,
                 )
                 continue
 
@@ -742,7 +755,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
                     block_stride_lists,
                 )
 
-            for layer_name in raw_tensor.shared_by:
+            for layer_name in layer_names:
                 self.layer_name_to_row[layer_name] = row_id
 
         self._finalize_layout_arrays(
@@ -773,7 +786,7 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
             return False
 
         has_full_attention = False
-        has_mamba = False
+        has_mamba_align = False
 
         for group in kv_cache_config.kv_cache_groups:
             if not getattr(group, "enable_kv_transfer", True):
@@ -789,8 +802,8 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
                 has_full_attention = has_full_attention or isinstance(
                     spec, FullAttentionSpec
                 )
-                has_mamba = has_mamba or isinstance(spec, MambaSpec)
-                if has_full_attention and has_mamba:
+                has_mamba_align = has_mamba_align or is_mamba_align_kv_cache_spec(spec)
+                if has_full_attention and has_mamba_align:
                     return True
 
         return False
