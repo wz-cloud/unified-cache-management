@@ -77,6 +77,8 @@ class FakeCombinedTensor:
 
 class FakeTorch:
     Tensor = (FakeTensor, FakeCombinedTensor)
+    # Python <= 3.13 evaluates the extracted layout's annotations eagerly.
+    dtype = type("FakeDtype", (), {})
 
 
 class FakeLogger:
@@ -715,6 +717,12 @@ class TestGLM53HybridLayout(unittest.TestCase):
         )
         self.Spec, self.MLA, self.AscendMLA = Spec, MLA, AscendMLA
         self.Mamba, self.Uniform = Mamba, Uniform
+
+    def test_dtype_annotation_can_be_evaluated(self):
+        # Also exercise annotation evaluation on Python 3.14, where it is lazy.
+        self.assertIs(
+            self.layout._dtype_size.__annotations__["dtype"], FakeTorch.dtype
+        )
 
     def fixture(self, cuda=False):
         config = self.layout.kv_cache_config
