@@ -542,9 +542,15 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         )
 
     def _has_glm53_shared_by_layout(self) -> bool:
-        """Detect GLM-5.3's transitional ``shared_by`` CUDA layout."""
+        """Detect GLM-5.3's transitional ``shared_by`` layout."""
         raw_tensors = self.kv_cache_config.kv_cache_tensors
-        if not current_platform.is_cuda_alike() or not raw_tensors:
+        if (
+            not (
+                current_platform.is_cuda_alike()
+                or current_platform.device_type == "npu"
+            )
+            or not raw_tensors
+        ):
             return False
         if any(
             not hasattr(raw_tensor, "shared_by")
@@ -575,6 +581,128 @@ class HybridLinearAttentionLayout(KVCacheLayout):
                 has_mla = any(ratio == 1 for ratio in ratios)
                 has_indexer = any(ratio > 1 for ratio in ratios)
         return has_mla and has_indexer and has_mamba
+
+    def _build_glm53_ascend_layout(self, kvcaches) -> None:
+        """Transfer live Ascend views with their own group block strides.
+
+        MLA and KDA alias component-major allocations, whereas the pooled
+        indexer has padded, block-major pages. Copying a raw allocation page
+        cannot describe both. Give each group its own columns and leave the
+        other columns null, as in the CUDA group layout. Rows are padded to
+        include standalone KDA layers as well as MLA/Indexer pairs.
+        """
+        descriptors = {
+            name: raw
+            for raw in self.kv_cache_config.kv_cache_tensors
+            for name in raw.shared_by
+        }
+        columns = []
+        self.layer_name_to_row = {}
+        specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
+        # Group order describes allocation slots, not execution order. Load
+        # every row before the first KDA runs in the layerwise connector.
+        self.preload_all_rows = True
+        for group_id, group in enumerate(self.kv_cache_config.kv_cache_groups):
+            if not participates_in_prefix_caching(group.kv_cache_spec):
+                continue
+            # Separate MLA from its compressed indexer within the same group.
+            families = defaultdict(list)
+            for name in group.layer_names:
+                spec = specs[name][0]
+                families[self._tokens_per_state(spec) > 1].append(name)
+            for names in families.values():
+                rows = []
+                for row_id, name in enumerate(names):
+                    spec = specs[name][0]
+                    raw = descriptors[name]
+                    allocation_blocks, remainder = divmod(
+                        int(raw.size), spec.page_size_bytes
+                    )
+                    if remainder or allocation_blocks < self.num_blocks:
+                        raise ValueError(f"Invalid Ascend allocation for {name}.")
+                    value = kvcaches[name]
+                    tensors = (value,) if isinstance(value, torch.Tensor) else value
+                    if not isinstance(tensors, (list, tuple)) or not tensors:
+                        raise TypeError(f"Unsupported Ascend KV entry for {name}.")
+                    row = []
+                    for tensor in tensors:
+                        if not isinstance(tensor, torch.Tensor):
+                            raise TypeError(f"Unsupported Ascend KV component: {name}.")
+                        # A scheduler block can contain several kernel blocks.
+                        chunks, remainder = divmod(tensor.shape[0], allocation_blocks)
+                        inner_size = math.prod(tensor.shape[1:])
+                        expected_stride = 1
+                        for dim in range(tensor.dim() - 1, 0, -1):
+                            if (
+                                tensor.shape[dim] > 1
+                                and tensor.stride(dim) != expected_stride
+                            ):
+                                raise ValueError(
+                                    f"Non-contiguous Ascend KV block: {name}."
+                                )
+                            expected_stride *= tensor.shape[dim]
+                        if (
+                            remainder
+                            or chunks < 1
+                            or (chunks > 1 and tensor.stride(0) != inner_size)
+                        ):
+                            raise ValueError(
+                                f"Unsupported Ascend kernel block layout: {name}."
+                            )
+                        size = chunks * inner_size * tensor.element_size()
+                        stride = chunks * tensor.stride(0) * tensor.element_size()
+                        if size == 0:
+                            continue
+                        if stride < size:
+                            raise ValueError(f"Overlapping Ascend KV blocks: {name}.")
+                        row.append(
+                            KVCacheSegment(
+                                ptr=int(tensor.data_ptr()),
+                                copy_size=size,
+                                block_stride=stride,
+                                buffer_size=(self.num_blocks - 1) * stride + size,
+                            )
+                        )
+                    if not row:
+                        raise ValueError(f"Empty Ascend KV entry for {name}.")
+                    rows.append(row)
+                    self.layer_name_to_row[name] = row_id
+                sizes = [segment.copy_size for segment in rows[0]]
+                if any([segment.copy_size for segment in row] != sizes for row in rows):
+                    raise ValueError(
+                        "Ascend GLM-5.3 cache family has unequal component sizes."
+                    )
+                columns.append((group_id, sizes, rows))
+
+        row_count = max(len(rows) for _, _, rows in columns)
+        width = sum(len(sizes) for _, sizes, _ in columns)
+        bases = [[0] * width for _ in range(row_count)]
+        buffers = [[0] * width for _ in range(row_count)]
+        strides = [[0] * width for _ in range(row_count)]
+        sizes = [size for _, family_sizes, _ in columns for size in family_sizes]
+        self.group_layouts = {}
+        offset = 0
+        for group_id, family_sizes, rows in columns:
+            group_bases, group_strides = self.group_layouts.setdefault(
+                group_id,
+                (
+                    np.zeros((row_count, width), dtype=np.uint64),
+                    np.zeros((row_count, width), dtype=np.uint64),
+                ),
+            )
+            for row_id, row in enumerate(rows):
+                for component, segment in enumerate(row, offset):
+                    bases[row_id][component] = segment.ptr
+                    buffers[row_id][component] = segment.buffer_size
+                    strides[row_id][component] = segment.block_stride
+                    group_bases[row_id, component] = segment.ptr
+                    group_strides[row_id, component] = segment.block_stride
+            offset += len(family_sizes)
+        self._finalize_layout_arrays(bases, buffers, [sizes] * row_count, strides)
+        self.group_layouts = {
+            group_id: (group_bases.reshape(-1), group_strides.reshape(-1))
+            for group_id, (group_bases, group_strides) in self.group_layouts.items()
+        }
 
     def _extract_group_addrs(
         self,
@@ -1011,7 +1139,10 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         # TODO: Restore standardized vLLM KV-cache descriptor support after
         # the upstream layout API and its GLM-5.3 representation stabilize.
         if self._has_glm53_shared_by_layout():
-            self._build_glm53_shared_by_layout(kvcaches)
+            if current_platform.device_type == "npu":
+                self._build_glm53_ascend_layout(kvcaches)
+            else:
+                self._build_glm53_shared_by_layout(kvcaches)
             return
 
         base_ptrs = []
@@ -2198,10 +2329,14 @@ class UCMHybridLinearAttentionLayerWiseConnector(UCMHybridLinearAttentionConnect
             # vLLM only calls wait_for_layer_load at full_attn (last layer of
             # each row), so row 0 must be loaded here before linear_attn begins.
             num_submit = min(self._load_prefetch_rows + 1, len(self.row_ids))
+            preload_all = getattr(self.kv_cache_layout, "preload_all_rows", False)
+            if preload_all:
+                num_submit = len(self.row_ids)
             for idx in range(num_submit):
                 self._submit_request_load_tasks_for_row_once(idx, metadata)
-            self._wait_row_load(0, metadata)
-            if len(self.row_ids) == 1:
+            for idx in range(num_submit if preload_all else 1):
+                self._wait_row_load(idx, metadata)
+            if preload_all or len(self.row_ids) == 1:
                 self._record_layerwise_load_bytes()
 
     def wait_for_layer_load(self, layer_name: str) -> None:

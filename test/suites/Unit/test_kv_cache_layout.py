@@ -2,6 +2,7 @@ import ast
 import math
 import re
 import unittest
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -653,6 +654,261 @@ class KVCacheLayoutTest(unittest.TestCase):
                 enable_sparse_sfa_c8=True,
                 enable_sparse_li_c8=True,
             )
+
+
+class TestGLM53HybridLayout(unittest.TestCase):
+    """Check group DMA addresses without importing vLLM or device runtimes."""
+
+    def setUp(self):
+        symbols = _load_layout_symbols()
+        source = (CONNECTOR_PATH.parent / "hla_connector.py").read_text(
+            encoding="utf-8"
+        )
+        names = {
+            "HybridLinearAttentionLayout",
+            "layer_name_to_kv_cache_spec",
+            "participates_in_prefix_caching",
+            "is_mamba_align_kv_cache_spec",
+        }
+        tree = ast.parse(source)
+        module = ast.Module(
+            body=[node for node in tree.body if getattr(node, "name", None) in names],
+            type_ignores=[],
+        )
+
+        class Spec:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class MLA(Spec):
+            pass
+
+        class AscendMLA(MLA):
+            pass
+
+        class Mamba(Spec):
+            mamba_cache_mode = "align"
+
+        class Uniform(Spec):
+            pass
+
+        self.platform = SimpleNamespace(device_type="npu", is_cuda_alike=lambda: False)
+        symbols.update(
+            KVCacheSpec=Spec,
+            FullAttentionSpec=Spec,
+            MLAAttentionSpec=MLA,
+            MambaSpec=Mamba,
+            UniformTypeKVCacheSpecs=Uniform,
+            defaultdict=defaultdict,
+            Any=object,
+            torch=FakeTorch,
+            current_platform=self.platform,
+        )
+        exec(
+            compile(module, str(CONNECTOR_PATH.parent / "hla_connector.py"), "exec"),
+            symbols,
+        )
+        self.layout = object.__new__(symbols["HybridLinearAttentionLayout"])
+        self.layout.num_blocks = 4
+        self.layout.kv_cache_config = SimpleNamespace(
+            kv_cache_groups=[], kv_cache_tensors=[]
+        )
+        self.Spec, self.MLA, self.AscendMLA = Spec, MLA, AscendMLA
+        self.Mamba, self.Uniform = Mamba, Uniform
+
+    def fixture(self, cuda=False):
+        config = self.layout.kv_cache_config
+        mla_type = self.MLA if cuda else self.AscendMLA
+        mla = mla_type(page_size_bytes=64, tokens_per_state=1)
+        indexer = mla_type(page_size_bytes=64, tokens_per_state=4)
+        config.kv_cache_groups = [
+            SimpleNamespace(
+                layer_names=["mla", "indexer"],
+                kv_cache_spec=self.Uniform(
+                    kv_cache_specs={"mla": mla, "indexer": indexer}
+                ),
+            ),
+            SimpleNamespace(
+                layer_names=["tail"],
+                kv_cache_spec=self.Spec(participates_in_prefix_caching=False),
+            ),
+            SimpleNamespace(
+                layer_names=["kda", "standalone"],
+                kv_cache_spec=self.Mamba(page_size_bytes=64),
+            ),
+        ]
+        config.kv_cache_tensors = [
+            SimpleNamespace(shared_by=["mla", "kda"], size=256),
+            SimpleNamespace(shared_by=["indexer", "tail"], size=256),
+            SimpleNamespace(shared_by=["standalone"], size=256),
+        ]
+
+        class View(FakeTensor):
+            def __init__(self, ptr, size, stride=None):
+                super().__init__(ptr, size, num_blocks=4)
+                self.block_stride = size if stride is None else stride
+
+            def stride(self, dimension):
+                return (
+                    self.block_stride if dimension == 0 else super().stride(dimension)
+                )
+
+        return {
+            "mla": (View(1064, 32), View(1192, 16)),
+            "indexer": View(2000, 8, 64),
+            "kda": [View(1000, 16), View(1064, 32)],
+            "standalone": [View(3000, 16), View(3064, 32)],
+            # Tail is deliberately absent: no tail view is needed for UCM.
+        }
+
+    def test_ascend_group_addresses_skip_tail_and_keep_standalone_kda(self):
+        caches = self.fixture()
+        self.assertTrue(self.layout._has_glm53_shared_by_layout())
+        self.layout._build_layout(caches)
+        self.assertEqual(self.layout.row_tensor_size_lists, [[32, 16, 8, 16, 32]] * 2)
+        self.assertNotIn("tail", self.layout.layer_name_to_row)
+        self.assertEqual(self.layout.layer_name_to_row["standalone"], 1)
+        addresses = self.layout.extract_block_addrs([2, 3], group_ids=[0, 2])
+        self.assertEqual(
+            addresses.tolist(),
+            [
+                [1128, 1224, 2128, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 1048, 1160, 0, 0, 0, 3048, 3160],
+            ],
+        )
+        np.testing.assert_array_equal(
+            self.layout.extract_block_addrs_for_row([3], 1, group_ids=[2]),
+            [[0, 0, 0, 3048, 3160]],
+        )
+        self.assertEqual(self.layout.buffer_sizes[2], 200)
+        self.assertTrue(self.layout.preload_all_rows)
+        with self.assertRaisesRegex(ValueError, "No hybrid physical layout"):
+            self.layout.extract_block_addrs([1], group_ids=[1])
+
+    def test_ascend_rejects_overlapping_blocks(self):
+        caches = self.fixture()
+        caches["indexer"].block_stride = 4
+        with self.assertRaisesRegex(ValueError, "Overlapping"):
+            self.layout._build_layout(caches)
+
+    def test_current_vllm_compress_ratio_matches_image_tokens_per_state(self):
+        for cuda in (False, True):
+            with self.subTest(cuda=cuda):
+                self.setUp()
+                caches = self.fixture(cuda=cuda)
+                self.platform.device_type = "cuda" if cuda else "npu"
+                self.platform.is_cuda_alike = lambda: cuda
+                specs = self.layout.kv_cache_config.kv_cache_groups[
+                    0
+                ].kv_cache_spec.kv_cache_specs
+                for spec in specs.values():
+                    spec.compress_ratio = spec.tokens_per_state
+                    del spec.tokens_per_state
+                self.assertTrue(self.layout._has_glm53_shared_by_layout())
+                self.assertEqual(self.layout._tokens_per_state(specs["indexer"]), 4)
+                if not cuda:
+                    self.layout._build_layout(caches)
+                    self.assertEqual(
+                        self.layout.extract_block_addrs([2], group_ids=[0]).tolist(),
+                        [[1128, 1224, 2128, 0, 0, 0, 0, 0, 0, 0]],
+                    )
+
+    def test_complete_cuda_and_ascend_glm53_allocations(self):
+        # 34 KDA + 11 MLA + 11 indexers; CUDA has four KDA groups,
+        # Ascend has three and one extra KDA-only allocation.
+        for cuda, group_lengths in ((True, [9, 9, 8, 8]), (False, [12, 11, 11])):
+            with self.subTest(cuda=cuda):
+                self.setUp()
+                sample = self.fixture(cuda=cuda)
+                View = type(sample["indexer"])
+                config = self.layout.kv_cache_config
+                self.platform.device_type = "cuda" if cuda else "npu"
+                self.platform.is_cuda_alike = lambda: cuda
+                mla_spec = config.kv_cache_groups[0].kv_cache_spec.kv_cache_specs["mla"]
+                indexer_spec = config.kv_cache_groups[0].kv_cache_spec.kv_cache_specs[
+                    "indexer"
+                ]
+                mla_names = [f"mla{i}" for i in range(11)]
+                indexer_names = [f"indexer{i}" for i in range(11)]
+                config.kv_cache_groups[0] = SimpleNamespace(
+                    layer_names=mla_names + indexer_names,
+                    kv_cache_spec=self.Uniform(
+                        kv_cache_specs={
+                            **dict.fromkeys(mla_names, mla_spec),
+                            **dict.fromkeys(indexer_names, indexer_spec),
+                        }
+                    ),
+                )
+                config.kv_cache_groups = config.kv_cache_groups[:2]
+                config.kv_cache_groups[1].layer_names = [f"tail{i}" for i in range(11)]
+                config.kv_cache_tensors = []
+                caches = {}
+                for i in range(max(group_lengths + [11])):
+                    shared = []
+                    base = 10000 + i * 1000
+                    if i < 11:
+                        shared.append(mla_names[i])
+                        caches[mla_names[i]] = (
+                            View(base, 64)
+                            if cuda
+                            else (View(base + 64, 32), View(base + 192, 16))
+                        )
+                    for g, length in enumerate(group_lengths):
+                        if i < length:
+                            name = f"kda{g}_{i}"
+                            shared.append(name)
+                            caches[name] = (
+                                View(base, 64)
+                                if cuda
+                                else (View(base, 16), View(base + 64, 32))
+                            )
+                    config.kv_cache_tensors.append(
+                        SimpleNamespace(shared_by=shared, size=256)
+                    )
+                for i, name in enumerate(indexer_names):
+                    base = 50000 + i * 1000
+                    caches[name] = View(base, 8, 64)
+                    caches[f"tail{i}"] = View(base, 16, 64)
+                    config.kv_cache_tensors.append(
+                        SimpleNamespace(
+                            shared_by=[name, f"tail{i}"],
+                            size=256,
+                        )
+                    )
+                for g, length in enumerate(group_lengths):
+                    config.kv_cache_groups.append(
+                        SimpleNamespace(
+                            layer_names=[f"kda{g}_{i}" for i in range(length)],
+                            kv_cache_spec=self.Mamba(page_size_bytes=64),
+                        )
+                    )
+                self.layout._build_layout(caches)
+                self.assertEqual(len(self.layout.row_slices), 11 if cuda else 12)
+                self.assertEqual(len(self.layout.layer_name_to_row), 67 if cuda else 56)
+                for g, length in enumerate(group_lengths):
+                    addresses = self.layout.extract_block_addrs([2], group_ids=[g + 2])[
+                        0
+                    ]
+                    live = addresses[addresses != 0].tolist()
+                    expected = []
+                    for i in range(length):
+                        base = 10000 + i * 1000
+                        expected.extend(
+                            [base + 128] if cuda else [base + 32, base + 128]
+                        )
+                    self.assertEqual(live, expected)
+
+    def test_cuda_still_dispatches_to_original_shared_page_builder(self):
+        self.fixture(cuda=True)
+        self.platform.device_type = "cuda"
+        self.platform.is_cuda_alike = lambda: True
+        from unittest.mock import Mock
+
+        self.layout._build_glm53_shared_by_layout = Mock()
+        self.layout._build_glm53_ascend_layout = Mock()
+        self.layout._build_layout({})
+        self.layout._build_glm53_shared_by_layout.assert_called_once_with({})
+        self.layout._build_glm53_ascend_layout.assert_not_called()
 
 
 if __name__ == "__main__":
