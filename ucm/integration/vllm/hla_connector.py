@@ -119,6 +119,14 @@ def participates_in_prefix_caching(spec: KVCacheSpec) -> bool:
             participates_in_prefix_caching(inner)
             for inner in spec.kv_cache_specs.values()
         )
+    # #15913 replaces KpoolTailSpec with sliding-window compressor state.
+    # UCM resumes only at complete logical blocks (and therefore complete
+    # pools); the incomplete-pool scratch state is not part of its prefix.
+    if (
+        getattr(spec, "model_version", None) == "glm5_next"
+        and getattr(spec, "cache_role", None) == "indexer_state"
+    ):
+        return False
     return bool(getattr(spec, "participates_in_prefix_caching", True))
 
 
@@ -594,11 +602,30 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         descriptors = {
             name: raw
             for raw in self.kv_cache_config.kv_cache_tensors
-            for name in raw.shared_by
+            for name in getattr(raw, "shared_by", getattr(raw, "layers", ()))
         }
+        specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
+        for raw in self.kv_cache_config.kv_cache_tensors:
+            names = getattr(raw, "shared_by", getattr(raw, "layers", ()))
+            stride = int(getattr(raw, "block_stride", 0))
+            if (
+                not names
+                or int(getattr(raw, "offset", 0)) != 0
+                or int(getattr(raw, "layer_stride", 0)) != 0
+                or (not hasattr(raw, "shared_by") and stride <= 0)
+                or (
+                    stride
+                    and (
+                        int(raw.size) != self.num_blocks * stride
+                        or any(
+                            specs[name][0].page_size_bytes != stride for name in names
+                        )
+                    )
+                )
+            ):
+                raise ValueError("Invalid Ascend GLM-5.3 shared-slot descriptor.")
         columns = []
         self.layer_name_to_row = {}
-        specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
         # Group order describes allocation slots, not execution order. Load
         # every row before the first KDA runs in the layerwise connector.
         self.preload_all_rows = True
@@ -611,6 +638,8 @@ class HybridLinearAttentionLayout(KVCacheLayout):
                 spec = specs[name][0]
                 families[self._tokens_per_state(spec) > 1].append(name)
             for names in families.values():
+                if not names:
+                    continue
                 rows = []
                 for row_id, name in enumerate(names):
                     spec = specs[name][0]

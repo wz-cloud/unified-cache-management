@@ -720,9 +720,7 @@ class TestGLM53HybridLayout(unittest.TestCase):
 
     def test_dtype_annotation_can_be_evaluated(self):
         # Also exercise annotation evaluation on Python 3.14, where it is lazy.
-        self.assertIs(
-            self.layout._dtype_size.__annotations__["dtype"], FakeTorch.dtype
-        )
+        self.assertIs(self.layout._dtype_size.__annotations__["dtype"], FakeTorch.dtype)
 
     def fixture(self, cuda=False):
         config = self.layout.kv_cache_config
@@ -798,6 +796,48 @@ class TestGLM53HybridLayout(unittest.TestCase):
         caches["indexer"].block_stride = 4
         with self.assertRaisesRegex(ValueError, "Overlapping"):
             self.layout._build_layout(caches)
+
+    def test_pr15913_state_and_standard_descriptors(self):
+        caches = self.fixture()
+        config = self.layout.kv_cache_config
+        state = self.Spec(
+            model_version="glm5_next",
+            cache_role="indexer_state",
+            page_size_bytes=64,
+            block_size=4,
+        )
+        config.kv_cache_groups[1].kv_cache_spec = self.Uniform(
+            kv_cache_specs={"tail": state}
+        )
+        for raw in config.kv_cache_tensors:
+            raw.layers = raw.shared_by
+            del raw.shared_by
+            raw.offset = raw.layer_stride = 0
+            raw.block_stride = 64
+        self.layout._build_layout(caches)
+        self.assertNotIn("tail", self.layout.layer_name_to_row)
+        self.assertNotIn(1, self.layout.group_layouts)
+        self.assertEqual(
+            self.layout.extract_block_addrs([2], group_ids=[0]).tolist(),
+            [[1128, 1224, 2128, 0, 0, 0, 0, 0, 0, 0]],
+        )
+
+    def test_rejects_packed_regions_in_shared_slot_descriptor(self):
+        caches = self.fixture()
+        self.layout.kv_cache_config.kv_cache_tensors[0].layer_stride = 256
+        with self.assertRaisesRegex(ValueError, "shared-slot descriptor"):
+            self.layout._build_layout(caches)
+
+    def test_nope_page_strided_mla_skips_empty_rope(self):
+        caches = self.fixture()
+        View = type(caches["indexer"])
+        caches["mla"] = (View(1000, 32, 64), View(1032, 0, 64))
+        self.layout._build_layout(caches)
+        self.assertEqual(self.layout.row_tensor_size_lists[0], [32, 8, 16, 32])
+        self.assertEqual(
+            self.layout.extract_block_addrs_for_row([2], 0, group_ids=[0]).tolist(),
+            [[1128, 2128, 0, 0]],
+        )
 
     def test_current_vllm_compress_ratio_matches_image_tokens_per_state(self):
         for cuda in (False, True):
