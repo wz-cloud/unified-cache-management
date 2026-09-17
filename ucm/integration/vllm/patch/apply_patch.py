@@ -208,6 +208,9 @@ def apply_all_patches() -> None:
             case "0.19.1":
                 logger.info("UCM patching vllm for pc...")
                 import ucm.integration.vllm.patch.v0191.vllm.pc_patch
+            case "0.23.0":
+                logger.info("UCM patching vllm for external Mamba align caching...")
+                import ucm.integration.vllm.patch.v0230.vllm.pc_patch
             case _:
                 pass
 
