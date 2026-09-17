@@ -1,8 +1,10 @@
-"""vLLM 0.23: Mamba align state management without local prefix reuse."""
+"""Mamba align state management without local prefix reuse for UCM images."""
 
 from copy import copy
 from functools import wraps
+from inspect import signature
 from types import FunctionType
+import warnings
 
 
 def uses_ucm(transfer):
@@ -26,11 +28,14 @@ def external_align(config):
     return (
         uses_ucm(transfer)
         and not cache.enable_prefix_caching
-        and cache.mamba_cache_mode == "align"
+        and getattr(cache, "mamba_cache_mode", None) == "align"
     )
 
 
 def patch_model_config(cls):
+    if cls is None or not hasattr(cls, "verify_and_update_config"):
+        warnings.warn("UCM external Mamba: model config hook unavailable", stacklevel=2)
+        return
     if "_ucm_external_align_original" in vars(cls):
         return
     original = cls.verify_and_update_config.__func__
@@ -54,6 +59,9 @@ def patch_model_config(cls):
 
 
 def patch_block_size_validator(cls):
+    if cls is None or not hasattr(cls, "validate_mamba_block_size"):
+        # Some versions do not have this separate validator.
+        return
     current = cls.validate_mamba_block_size
     if getattr(current, "_ucm_external_align", False):
         return
@@ -80,6 +88,9 @@ def patch_block_size_validator(cls):
 
 
 def patch_runner(cls):
+    if cls is None or not hasattr(cls, "may_reinitialize_input_batch"):
+        warnings.warn("UCM external Mamba: runner hook unavailable", stacklevel=2)
+        return
     original = cls.may_reinitialize_input_batch
     if getattr(original, "_ucm_external_align", False):
         return
@@ -103,24 +114,34 @@ def patch_runner(cls):
 
 
 def patch_preprocess(mod):
+    if not hasattr(mod, "preprocess_mamba"):
+        warnings.warn("UCM external Mamba: preprocess hook unavailable", stacklevel=2)
+        return
     original = mod.preprocess_mamba
     if getattr(original, "_ucm_external_align", False):
         return
 
+    parameters = list(signature(original).parameters)
+    if "cache_config" not in parameters:
+        warnings.warn("UCM external Mamba: unsupported preprocess signature", stacklevel=2)
+        return
+    cache_index = parameters.index("cache_config")
+
     @wraps(original)
     def preprocess(*args, **kwargs):
         cache = kwargs.get("cache_config")
-        if cache is None and len(args) > 2:
-            cache = args[2]
+        if cache is None and len(args) > cache_index:
+            cache = args[cache_index]
         if cache is not None and (
-            not cache.enable_prefix_caching and cache.mamba_cache_mode == "align"
+            not cache.enable_prefix_caching
+            and getattr(cache, "mamba_cache_mode", None) == "align"
         ):
             # Upstream only reads the PC flag for its assertion. Do not mutate
             # the shared scheduler/worker configuration during a forward pass.
             cache = copy(cache)
             cache.enable_prefix_caching = True
-            if len(args) > 2:
-                args = (*args[:2], cache, *args[3:])
+            if len(args) > cache_index:
+                args = (*args[:cache_index], cache, *args[cache_index + 1:])
             else:
                 kwargs["cache_config"] = cache
         return original(*args, **kwargs)

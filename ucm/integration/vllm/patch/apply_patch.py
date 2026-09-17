@@ -208,11 +208,13 @@ def apply_all_patches() -> None:
             case "0.19.1":
                 logger.info("UCM patching vllm for pc...")
                 import ucm.integration.vllm.patch.v0191.vllm.pc_patch
-            case "0.23.0":
-                logger.info("UCM patching vllm for external Mamba align caching...")
-                import ucm.integration.vllm.patch.v0230.vllm.pc_patch
             case _:
                 pass
+
+        # Image builds may use different vLLM versions on CUDA and Ascend.
+        # Register by capability, with runtime UCM + PC-off + align gating.
+        logger.info("UCM patching vllm for external Mamba align caching...")
+        import ucm.integration.vllm.patch.common.external_mamba_patch
 
         major, minor, *_ = version.split(".")
         if (int(major), int(minor)) >= (0, 18):
