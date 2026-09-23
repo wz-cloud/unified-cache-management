@@ -1266,6 +1266,9 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
             return True
 
         layer_to_specs = layer_name_to_kv_cache_spec(kv_cache_config)
+        # Attention and Mamba layers may use separate tensor allocations.
+        has_full_attention = False
+        has_mamba_align = False
         for raw_tensor in kv_cache_config.kv_cache_tensors:
             shared_by = _kv_cache_tensor_layers(raw_tensor)
             shared_specs = [
@@ -1273,12 +1276,14 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
                 for layer_name in shared_by
                 for spec in layer_to_specs.get(layer_name, [])
             ]
-            if any(
+            has_full_attention |= any(
                 isinstance(spec, FullAttentionSpec) for spec in shared_specs
-            ) and any(
+            )
+            has_mamba_align |= any(
                 isinstance(spec, MambaSpec) and spec.mamba_cache_mode == "align"
                 for spec in shared_specs
-            ):
+            )
+            if has_full_attention and has_mamba_align:
                 return True
 
         return False
