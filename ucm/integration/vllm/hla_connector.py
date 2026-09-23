@@ -55,6 +55,11 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
+def _kv_cache_tensor_layers(raw_tensor) -> list[str]:
+    """Read layer names from both new and legacy vLLM tensor descriptors."""
+    return getattr(raw_tensor, "layers", getattr(raw_tensor, "shared_by", []))
+
+
 @dataclass
 class HLARequestMeta(RequestMeta):
     """RequestMeta extended with per-group block tracking for hybrid models."""
@@ -537,7 +542,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
 
     @staticmethod
     def _has_glm53_shared_by_layout(kv_cache_config) -> bool:
-        """Detect GLM-5.3-Flash's image-specific ``shared_by`` layout."""
+        """Detect GLM-5.3-Flash's image layout with either layer-name field."""
         raw_tensors = kv_cache_config.kv_cache_tensors
         if (
             not (
@@ -545,7 +550,10 @@ class HybridLinearAttentionLayout(KVCacheLayout):
                 or current_platform.device_type == "npu"
             )
             or not raw_tensors
-            or any(not hasattr(raw, "shared_by") for raw in raw_tensors)
+            or any(
+                not (hasattr(raw, "layers") or hasattr(raw, "shared_by"))
+                for raw in raw_tensors
+            )
         ):
             return False
         is_npu = current_platform.device_type == "npu"
@@ -594,11 +602,11 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         descriptors = {
             name: raw
             for raw in self.kv_cache_config.kv_cache_tensors
-            for name in raw.shared_by
+            for name in _kv_cache_tensor_layers(raw)
         }
         specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
         for raw in self.kv_cache_config.kv_cache_tensors:
-            names = raw.shared_by
+            names = _kv_cache_tensor_layers(raw)
             stride = int(getattr(raw, "block_stride", 0))
             if (
                 not names
@@ -821,7 +829,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         """
         segments: dict[str, KVCacheSegment] = {}
         for raw_tensor in self.kv_cache_config.kv_cache_tensors:
-            shared_by = list(raw_tensor.shared_by)
+            shared_by = list(_kv_cache_tensor_layers(raw_tensor))
             if not shared_by:
                 continue
             if int(raw_tensor.size) % self.num_blocks != 0:
@@ -1023,7 +1031,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
     ) -> tuple[list[KVCacheSpec], list[int]]:
         shared_specs: list[KVCacheSpec] = []
         shared_ptrs: list[int] = []
-        for layer_name in raw_tensor.shared_by:
+        for layer_name in _kv_cache_tensor_layers(raw_tensor):
             kv_layer = kvcaches.get(layer_name)
             if kv_layer is None:
                 continue
@@ -1155,7 +1163,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         block_stride_lists.append(sizes)
 
     def _build_layout(self, kvcaches):
-        # GLM adaptation targets the image's shared_by descriptors;
+        # GLM adaptation accepts both layers and legacy shared_by descriptors;
         # other hybrid models retain the original HLA layout below.
         if self._has_glm53_shared_by_layout(self.kv_cache_config):
             if current_platform.device_type == "npu":
@@ -1174,7 +1182,8 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         layer_to_specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
 
         for raw_tensor in self.kv_cache_config.kv_cache_tensors:
-            if not raw_tensor.shared_by:
+            layer_names = _kv_cache_tensor_layers(raw_tensor)
+            if not layer_names:
                 continue
 
             shared_specs, shared_ptrs = self._collect_shared_tensor_info(
@@ -1183,7 +1192,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
 
             if not shared_ptrs:
                 logger.warning(
-                    f"no kv cache tensor found for shared layers {raw_tensor.shared_by}"
+                    f"no kv cache tensor found for shared layers {layer_names}"
                 )
                 continue
 
@@ -1223,7 +1232,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
                     block_stride_lists,
                 )
 
-            for layer_name in raw_tensor.shared_by:
+            for layer_name in layer_names:
                 self.layer_name_to_row[layer_name] = row_id
 
         self._finalize_layout_arrays(
@@ -1258,7 +1267,7 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
 
         layer_to_specs = layer_name_to_kv_cache_spec(kv_cache_config)
         for raw_tensor in kv_cache_config.kv_cache_tensors:
-            shared_by = getattr(raw_tensor, "shared_by", [])
+            shared_by = _kv_cache_tensor_layers(raw_tensor)
             shared_specs = [
                 spec
                 for layer_name in shared_by
