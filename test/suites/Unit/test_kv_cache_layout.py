@@ -2,10 +2,12 @@ import ast
 import math
 import re
 import unittest
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import List, Optional, Tuple
+from unittest.mock import Mock
 
 import numpy as np
 
@@ -132,6 +134,307 @@ get_store_gc_block_size = LAYOUT_SYMBOLS["_get_store_gc_block_size"]
 get_store_io_sizes = LAYOUT_SYMBOLS["_get_store_io_sizes"]
 KVCacheLayout = LAYOUT_SYMBOLS["KVCacheLayout"]
 SharedIndexerKVCacheLayout = LAYOUT_SYMBOLS["SharedIndexerKVCacheLayout"]
+
+
+class FakePageSpec(SimpleNamespace):
+    pass
+
+
+class FakeMambaSpec(FakePageSpec):
+    pass
+
+
+class FakeAttentionSpec(FakePageSpec):
+    pass
+
+
+class FakeStorageTensor(FakeTensor):
+    def __init__(self, ptr, storage_ptr, storage_size):
+        super().__init__(ptr, 1)
+        self._storage = SimpleNamespace(
+            data_ptr=lambda: storage_ptr, nbytes=lambda: storage_size
+        )
+
+    def untyped_storage(self):
+        return self._storage
+
+
+def _load_hla_layout():
+    path = CONNECTOR_PATH.with_name("hla_connector.py")
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    names = {
+        "_kv_cache_tensor_layers",
+        "layer_name_to_kv_cache_spec",
+        "block_size_from_kv_cache_spec",
+        "is_mamba_align_kv_cache_spec",
+        "participates_in_prefix_caching",
+        "GroupInfo",
+        "KVCacheGroupManager",
+        "HybridLinearAttentionLayout",
+    }
+    nodes = [node for node in tree.body if getattr(node, "name", None) in names]
+    connector = next(
+        node
+        for node in tree.body
+        if getattr(node, "name", None) == "UCMHybridLinearAttentionConnector"
+    )
+    supports_layout = next(
+        node
+        for node in connector.body
+        if getattr(node, "name", None) == "supports_kv_cache_layout"
+    )
+    supports_layout.decorator_list = []
+    nodes.append(supports_layout)
+    module = ast.parse("from __future__ import annotations")
+    module.body.extend(nodes)
+    namespace = dict(LAYOUT_SYMBOLS)
+    namespace.update(
+        defaultdict=defaultdict,
+        FullAttentionSpec=FakeAttentionSpec,
+        MLAAttentionSpec=type("FakeMLASpec", (FakeAttentionSpec,), {}),
+        MambaSpec=FakeMambaSpec,
+        UniformTypeKVCacheSpecs=type("FakeUniformSpec", (), {}),
+        current_platform=SimpleNamespace(
+            device_type="cuda", is_cuda_alike=lambda: True
+        ),
+    )
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
+
+
+HLA_SYMBOLS = _load_hla_layout()
+HybridLinearAttentionLayout = HLA_SYMBOLS["HybridLinearAttentionLayout"]
+
+
+def _build_hla_layout(
+    *,
+    num_blocks=26168,
+    page_size=327680,
+    layer_count=8,
+    layout_name="LBNHC",
+    offset=0,
+    mode="none",
+    group_block_sizes=(2000, 2000, 2000, 320),
+    mutate=None,
+):
+    """Reproduce Qwen3.5 log snapshots without allocating real cache storage."""
+    storage_ptr = 0x100000000
+    block_outer = layout_name.startswith("BL")
+    layer_stride = page_size if block_outer else num_blocks * page_size
+    block_stride = layer_count * page_size if block_outer else page_size
+    size = offset + num_blocks * layer_count * page_size
+    descriptors, groups, caches = [], [], {}
+    for group_id in range(4):
+        suffix = "linear_attn" if group_id < 3 else "self_attn.attn"
+        names = [
+            f"language_model.model.layers.{4 * i + group_id}.{suffix}"
+            for i in range(layer_count)
+        ]
+        spec_cls = FakeMambaSpec if group_id < 3 else FakeAttentionSpec
+        spec = spec_cls(
+            page_size_bytes=page_size,
+            block_size=group_block_sizes[group_id],
+            mamba_cache_mode=mode,
+        )
+        groups.append(SimpleNamespace(layer_names=names, kv_cache_spec=spec))
+        descriptors.append(
+            SimpleNamespace(
+                size=size,
+                layers=names,
+                layer_stride=layer_stride,
+                block_stride=block_stride,
+                offset=offset,
+                host_resident=False,
+            )
+        )
+        for i, name in enumerate(names):
+            caches[name] = FakeStorageTensor(
+                storage_ptr + offset + i * layer_stride, storage_ptr, size
+            )
+    config = SimpleNamespace(
+        num_blocks=num_blocks,
+        kv_cache_tensors=descriptors,
+        kv_cache_groups=groups,
+        kv_cache_layout=layout_name,
+    )
+    if mutate:
+        mutate(config, caches)
+    vllm_config = SimpleNamespace(
+        parallel_config=SimpleNamespace(pipeline_parallel_size=1),
+        model_config=SimpleNamespace(
+            hf_text_config=SimpleNamespace(num_hidden_layers=4 * layer_count)
+        ),
+    )
+    return HybridLinearAttentionLayout(caches, {}, vllm_config, config)
+
+
+class HybridLinearAttentionLayoutTest(unittest.TestCase):
+    def test_current_qwen35_align_log_has_sixteen_shared_rows(self):
+        layout = _build_hla_layout(
+            num_blocks=3895,
+            page_size=917504,
+            layer_count=16,
+            mode="align",
+            group_block_sizes=(896,) * 4,
+        )
+        self.assertEqual(layout.row_tensor_size_lists, [[917504]] * 16)
+        self.assertEqual(layout.block_stride_lists.tolist(), [917504] * 16)
+        self.assertEqual(layout.buffer_sizes.tolist(), [3573678080] * 16)
+        self.assertEqual(layout.block_size, 14680064)
+        for layer, row in layout.layer_name_to_row.items():
+            self.assertEqual(row, _extract_layer_index(layer) // 4)
+        for group_id in range(4):
+            blocks = [0, 1, 3894]
+            addrs = layout.extract_block_addrs(blocks, group_ids=[group_id] * 3)
+            expected = [
+                [0x100000000 + row * 3573678080 + block * 917504 for row in range(16)]
+                for block in blocks
+            ]
+            np.testing.assert_array_equal(addrs, expected)
+            for row in range(16):
+                np.testing.assert_array_equal(
+                    layout.extract_block_addrs_for_row(
+                        blocks, row, group_ids=[group_id] * 3
+                    ),
+                    addrs[:, row : row + 1],
+                )
+        self.assertEqual(int(addrs[-1, -1]) + 917504, 0x100000000 + 57178849280)
+        self.assertFalse(getattr(layout, "preload_all_rows", False))
+        self.assertFalse(getattr(layout, "save_after_forward", False))
+
+    def test_current_align_config_is_selected_and_uses_896_token_boundaries(self):
+        layout = _build_hla_layout(
+            num_blocks=3895,
+            page_size=917504,
+            layer_count=16,
+            mode="align",
+            group_block_sizes=(896,) * 4,
+        )
+        config = layout.kv_cache_config
+        supports = HLA_SYMBOLS["supports_kv_cache_layout"]
+        self.assertTrue(supports(None, config))
+        hasher = Mock(return_value=b"seed")
+        manager = HLA_SYMBOLS["KVCacheGroupManager"](config, hasher, b"base")
+        self.assertEqual([group.group_id for group in manager.state_groups], [0, 1, 2])
+        self.assertEqual([group.group_id for group in manager.full_attn_groups], [3])
+        self.assertEqual(manager.lcm_block_size, 896)
+        hasher.make_request_block_hasher.assert_called_once_with(896, b"seed")
+        for group in config.kv_cache_groups[:3]:
+            group.kv_cache_spec.mamba_cache_mode = "none"
+        self.assertFalse(supports(None, config))
+
+    def test_qwen35_descriptor_aliases_become_eight_physical_rows(self):
+        for mode in ("none", "align"):
+            with self.subTest(mode=mode):
+                layout = _build_hla_layout(mode=mode)
+                self.assertEqual(layout.tensor_size_lists.tolist(), [327680] * 8)
+                self.assertEqual(layout.block_stride_lists.tolist(), [327680] * 8)
+                self.assertEqual(layout.buffer_sizes.tolist(), [8574730240] * 8)
+                self.assertEqual(int(layout.tensor_size_lists.sum()), 2621440)
+                self.assertEqual(layout.row_tensor_size_lists, [[327680]] * 8)
+                layout.use_layerwise = False
+                self.assertEqual(layout.tensor_size_list, [327680] * 8)
+                self.assertEqual(layout.shard_size, 2621440)
+                for name, row in layout.layer_name_to_row.items():
+                    self.assertEqual(row, _extract_layer_index(name) // 4)
+                for group in range(4):
+                    blocks = [0, 1, 26167]
+                    addrs = layout.extract_block_addrs(blocks, group_ids=[group] * 3)
+                    expected = [
+                        [0x100000000 + i * 8574730240 + b * 327680 for i in range(8)]
+                        for b in blocks
+                    ]
+                    np.testing.assert_array_equal(addrs, expected)
+                    for row in range(8):
+                        np.testing.assert_array_equal(
+                            layout.extract_block_addrs_for_row(
+                                blocks, row, group_ids=[group] * 3
+                            ),
+                            addrs[:, row : row + 1],
+                        )
+                self.assertEqual(int(addrs[-1, -1]) + 327680, 0x100000000 + 68597841920)
+                self.assertFalse(getattr(layout, "preload_all_rows", False))
+
+    def test_copy_round_trip_preserves_other_blocks_and_nonzero_offset(self):
+        for name in ("LBNHC", "LBHNC", "BLNHC", "BLHNC"):
+            with self.subTest(layout=name):
+                layout = _build_hla_layout(
+                    num_blocks=3,
+                    page_size=32,
+                    layer_count=2,
+                    offset=16,
+                    layout_name=name,
+                )
+                memory = bytearray(range(208))
+                original = memory[:]
+                # Transfer one block through the public address API. A wrong
+                # stride or duplicated offset damages a neighbouring block.
+                addrs = layout.extract_block_addrs([1], group_ids=[3])[0]
+                starts = [int(addr) - 0x100000000 for addr in addrs]
+                expected = [48, 144] if name.startswith("LB") else [80, 112]
+                self.assertEqual(starts, expected)
+                saved = [memory[start : start + 32] for start in starts]
+                for start in starts:
+                    memory[start : start + 32] = bytes(32)
+                for start, payload in zip(starts, saved):
+                    memory[start : start + 32] = payload
+                self.assertEqual(memory, original)
+                self.assertEqual(
+                    layout.buffer_sizes.tolist(),
+                    [96, 96] if name.startswith("LB") else [160, 160],
+                )
+
+    def test_distinct_group_rows_are_masked_out(self):
+        def separate_last_group(config, caches):
+            for name in config.kv_cache_groups[3].layer_names:
+                old = caches[name]
+                caches[name] = FakeStorageTensor(
+                    old.data_ptr() + 0x100000,
+                    0x100100000,
+                    config.kv_cache_tensors[3].size,
+                )
+
+        layout = _build_hla_layout(
+            num_blocks=3, page_size=32, layer_count=2, mutate=separate_last_group
+        )
+        addrs = layout.extract_block_addrs([1, 1], group_ids=[0, 3])
+        np.testing.assert_array_equal(addrs[0, 2:], [0, 0])
+        np.testing.assert_array_equal(addrs[1, :2], [0, 0])
+        self.assertTrue(layout.preload_all_rows)
+        self.assertTrue(layout.save_after_forward)
+        with self.assertRaisesRegex(ValueError, "requires a group id"):
+            layout.extract_block_addrs([1])
+        with self.assertRaisesRegex(ValueError, "lengths differ"):
+            layout.extract_block_addrs([1], group_ids=[])
+
+    def test_invalid_descriptor_cannot_generate_out_of_bounds_addresses(self):
+        def invalid_stride(config, _caches):
+            config.kv_cache_tensors[0].block_stride *= 2
+
+        with self.assertRaisesRegex(ValueError, "exceed their descriptor"):
+            _build_hla_layout(mutate=invalid_stride)
+
+    def test_inconsistent_backing_storage_is_rejected(self):
+        def undersized_storage(_config, caches):
+            tensor = next(iter(caches.values()))
+            tensor._storage.nbytes = lambda: 1
+
+        with self.assertRaisesRegex(ValueError, "Inconsistent HLA backing storage"):
+            _build_hla_layout(mutate=undersized_storage)
+
+    def test_non_contiguous_layer_page_layout_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "requires contiguous layer pages"):
+            _build_hla_layout(layout_name="LHBNC")
+
+    def test_legacy_shared_by_still_uses_one_row_per_allocation(self):
+        def legacy(config, caches):
+            config.kv_cache_tensors = [SimpleNamespace(size=96, shared_by=list(caches))]
+
+        layout = _build_hla_layout(
+            num_blocks=3, page_size=32, layer_count=1, mutate=legacy
+        )
+        self.assertEqual(layout.tensor_size_lists.tolist(), [32])
+        np.testing.assert_array_equal(layout.extract_block_addrs([1]), [[0x100000020]])
 
 
 def _build_layout(

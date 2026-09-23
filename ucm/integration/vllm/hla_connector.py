@@ -447,6 +447,10 @@ class KVCacheGroupManager:
 class HybridLinearAttentionLayout(KVCacheLayout):
     """Physical layout for hybrid full-attention + linear-attention pages.
 
+    Current vLLM descriptors place layers using explicit byte offsets and
+    strides in shared storage. Each distinct layer page is one transfer row;
+    layers that alias the same page share that row.
+
     vLLM may back full-attention and linear-attention layers with one shared
     raw int8 tensor. The physical layout is backend dependent:
 
@@ -783,7 +787,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         if hasattr(self, "group_layouts"):
             if group_ids is None:
                 raise ValueError(
-                    "The GLM-5.3-Flash hybrid layout requires a group id for "
+                    "The group-aware hybrid layout requires a group id for "
                     "each vLLM block id."
                 )
             return self._extract_group_addrs(vllm_block_ids, group_ids)
@@ -807,7 +811,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         if hasattr(self, "group_layouts"):
             if group_ids is None:
                 raise ValueError(
-                    "The GLM-5.3-Flash hybrid layout requires a group id for "
+                    "The group-aware hybrid layout requires a group id for "
                     "each vLLM block id."
                 )
             return self._extract_group_addrs(
@@ -1163,6 +1167,13 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         block_stride_lists.append(sizes)
 
     def _build_layout(self, kvcaches):
+        if any(
+            hasattr(raw, "layers") and int(getattr(raw, "layer_stride", 0)) > 0
+            for raw in self.kv_cache_config.kv_cache_tensors
+        ):
+            self._build_strided_layout(kvcaches)
+            return
+
         # GLM adaptation accepts both layers and legacy shared_by descriptors;
         # other hybrid models retain the original HLA layout below.
         if self._has_glm53_shared_by_layout(self.kv_cache_config):
@@ -1241,6 +1252,91 @@ class HybridLinearAttentionLayout(KVCacheLayout):
             tensor_size_lists,
             block_stride_lists,
         )
+
+    def _build_strided_layout(self, kvcaches) -> None:
+        """Use KVCacheTensor byte strides, deduplicating aliased layer pages."""
+        layout_name = getattr(self.kv_cache_config, "kv_cache_layout", None)
+        if layout_name not in (None, "LBNHC", "LBHNC", "BLNHC", "BLHNC"):
+            raise ValueError(f"HLA requires contiguous layer pages: {layout_name}.")
+        if self.num_blocks <= 0:
+            raise ValueError("HLA requires a positive KV cache block count.")
+
+        specs = layer_name_to_kv_cache_spec(self.kv_cache_config)
+        segments: list[KVCacheSegment] = []
+        row_by_page: dict[tuple[int, int, int], int] = {}
+        self.layer_name_to_row = {}
+        for raw in self.kv_cache_config.kv_cache_tensors:
+            names = getattr(raw, "layers", [])
+            layer_stride = int(getattr(raw, "layer_stride", 0))
+            block_stride = int(getattr(raw, "block_stride", 0))
+            offset = int(getattr(raw, "offset", 0))
+            if not names or layer_stride <= 0 or block_stride <= 0 or offset < 0:
+                raise ValueError(f"Invalid strided HLA descriptor: {raw}.")
+            storage_ptr = None
+            for layer_index, name in enumerate(names):
+                value = kvcaches[name]
+                tensors = (value,) if isinstance(value, torch.Tensor) else value
+                if not isinstance(tensors, (tuple, list)) or not tensors:
+                    raise TypeError(f"Unsupported strided HLA KV entry: {name}.")
+                for tensor in tensors:
+                    if not isinstance(tensor, torch.Tensor):
+                        raise TypeError(f"Unsupported strided HLA component: {name}.")
+                    storage = tensor.untyped_storage()
+                    if storage_ptr is None:
+                        storage_ptr = int(storage.data_ptr())
+                    if int(storage.data_ptr()) != storage_ptr or storage.nbytes() < int(
+                        raw.size
+                    ):
+                        raise ValueError(f"Inconsistent HLA backing storage: {name}.")
+
+                layer_specs = specs[name]
+                if len(layer_specs) != 1:
+                    raise ValueError(f"Ambiguous HLA page specification: {name}.")
+                page_size = int(layer_specs[0].page_size_bytes)
+                page_offset = offset + layer_index * layer_stride
+                span = (self.num_blocks - 1) * block_stride + page_size
+                if (
+                    page_size <= 0
+                    or min(layer_stride, block_stride) < page_size
+                    or page_offset + span > int(raw.size)
+                ):
+                    raise ValueError(
+                        f"HLA layer pages exceed their descriptor: {name}."
+                    )
+                # data_ptr() already includes the view offset. Start from the
+                # storage base so descriptor.offset is applied exactly once.
+                ptr = storage_ptr + page_offset
+                key = (ptr, block_stride, page_size)
+                row_id = row_by_page.get(key)
+                if row_id is None:
+                    row_id = len(segments)
+                    row_by_page[key] = row_id
+                    segments.append(KVCacheSegment(ptr, page_size, block_stride, span))
+                self.layer_name_to_row[name] = row_id
+
+        self._finalize_layout_arrays(
+            [[segment.ptr] for segment in segments],
+            [[segment.buffer_size] for segment in segments],
+            [[segment.copy_size] for segment in segments],
+            [[segment.block_stride] for segment in segments],
+        )
+        self.group_layouts = {}
+        group_rows = []
+        for group_id, group in enumerate(self.kv_cache_config.kv_cache_groups):
+            rows = sorted({self.layer_name_to_row[name] for name in group.layer_names})
+            bases = np.zeros_like(self.base_ptrs)
+            strides = np.zeros_like(self.block_stride_lists)
+            bases[rows] = self.base_ptrs[rows]
+            strides[rows] = self.block_stride_lists[rows]
+            self.group_layouts[group_id] = (bases, strides)
+            group_rows.append(rows)
+
+        # Unequal group placements may overlap only part of another row or
+        # visit rows in different execution orders. Use forward boundaries
+        # for those layouts; identical Qwen-style slots retain pipelining.
+        if any(rows != group_rows[0] for rows in group_rows[1:]):
+            self.preload_all_rows = True
+            self.save_after_forward = True
 
 
 class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):

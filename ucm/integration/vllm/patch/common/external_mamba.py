@@ -1,4 +1,4 @@
-"""Mamba align state management without local prefix reuse for UCM images."""
+git"""Mamba align state management without local prefix reuse for UCM images."""
 
 from copy import copy
 from functools import wraps
