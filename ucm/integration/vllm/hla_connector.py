@@ -1332,16 +1332,14 @@ class UCMHybridLinearAttentionConnector(UCMDirectConnector, SupportsHMA):
         total_hit_full_attn = total_hit_tokens // primary_full_attn.block_size
         all_hit_full_attn = primary_block_ids[0:total_hit_full_attn]
         hbm_full_attn = primary_block_ids[0:hbm_hit_full_attn]
-        if hbm_full_attn:
-            self.store.prefetch(hbm_full_attn)
-        if mamba_prefetch_hashes:
-            self.store.prefetch(mamba_prefetch_hashes)
         # MLA full-attn is TP-replicated (shared hash), no per-rank entries to prefetch.
         # Only mamba blocks have per-rank entries needing heat update.
         per_rank_hashes = mamba_prefetch_hashes
         if not self.is_mla:
             per_rank_hashes = all_hit_full_attn + mamba_prefetch_hashes
-        self._prefetch_other_rank_hashes(per_rank_hashes)
+        # Use the base connector's best-effort hotness update. It refreshes
+        # rank 0 as well as other ranks and isolates prefetch failures.
+        self._prefetch_direct_hit_key_hotness(hbm_full_attn, per_rank_hashes)
 
         if len(primary_block_ids) > 0:
             ucmmetrics.update_stats(
