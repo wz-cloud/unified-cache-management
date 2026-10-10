@@ -55,9 +55,11 @@ if TYPE_CHECKING:
 
 logger = init_logger(__name__)
 
+
 def _kv_cache_tensor_layers(raw_tensor) -> list[str]:
     """Read layer names from both new and legacy vLLM tensor descriptors."""
     return getattr(raw_tensor, "layers", getattr(raw_tensor, "shared_by", []))
+
 
 @dataclass
 class HLARequestMeta(RequestMeta):
@@ -111,6 +113,7 @@ def is_mamba_align_kv_cache_spec(spec: KVCacheSpec) -> bool:
         return is_mamba_align_kv_cache_spec(sample)
     return isinstance(spec, MambaSpec) and spec.mamba_cache_mode == "align"
 
+
 def participates_in_prefix_caching(spec: KVCacheSpec) -> bool:
     """Read HLA prefix-cache eligibility, excluding transient GLM indexer state."""
     if isinstance(spec, UniformTypeKVCacheSpecs):
@@ -123,6 +126,7 @@ def participates_in_prefix_caching(spec: KVCacheSpec) -> bool:
     return bool(getattr(spec, "prefix_cacheable", True)) and bool(
         getattr(spec, "participates_in_prefix_caching", True)
     )
+
 
 def extend_non_null(
     dst_ucm_block_ids: list[bytes],
@@ -661,9 +665,7 @@ class HybridLinearAttentionLayout(KVCacheLayout):
         self, name: str, kvcaches, raw, spec: KVCacheSpec
     ) -> list[KVCacheSegment]:
         """Build one layer's live components, preserving padded block strides."""
-        allocation_blocks, remainder = divmod(
-            int(raw.size), spec.page_size_bytes
-        )
+        allocation_blocks, remainder = divmod(int(raw.size), spec.page_size_bytes)
         if remainder or allocation_blocks < self.num_blocks:
             raise ValueError(f"Invalid Ascend allocation for {name}.")
         value = kvcaches[name]
@@ -682,22 +684,15 @@ class HybridLinearAttentionLayout(KVCacheLayout):
             inner_size = math.prod(tensor.shape[1:])
             expected_stride = 1
             for dim in range(tensor.dim() - 1, 0, -1):
-                if (
-                    tensor.shape[dim] > 1
-                    and tensor.stride(dim) != expected_stride
-                ):
-                    raise ValueError(
-                        f"Non-contiguous Ascend KV block: {name}."
-                    )
+                if tensor.shape[dim] > 1and tensor.stride(dim) != expected_stride:
+                    raise ValueError(f"Non-contiguous Ascend KV block: {name}.")
                 expected_stride *= tensor.shape[dim]
             if (
                 remainder
                 or chunks < 1
                 or (chunks > 1 and tensor.stride(0) != inner_size)
             ):
-                raise ValueError(
-                    f"Unsupported Ascend kernel block layout: {name}."
-                )
+                raise ValueError(f"Unsupported Ascend kernel block layout: {name}.")
             size = chunks * inner_size * tensor.element_size()
             stride = chunks * tensor.stride(0) * tensor.element_size()
             if stride < size:
@@ -2348,6 +2343,7 @@ class UCMHybridLinearAttentionLayerWiseConnector(UCMHybridLinearAttentionConnect
         self.is_save = False
         if self.enable_event_sync:
             self.device.destroy_event_handles()
+
 
 class UCMHLALiteConnector(UCMLiteConnector, SupportsHMA):
     """UCM Lite connector for full-attention + linear-attention hybrids.
