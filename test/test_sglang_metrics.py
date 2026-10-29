@@ -165,17 +165,16 @@ def test_two_workers_existing_thread_and_asgi_endpoint(tmp_path):
     )
 
 
-@pytest.mark.parametrize("disable", ["sglang", "ucm", "no_path"])
+@pytest.mark.parametrize("disable", ["sglang", "ucm"])
 def test_disabled_does_not_import_prometheus(tmp_path, disable):
     run_child(
         tmp_path,
         f"""
         if {disable!r} == "sglang":
             storage.enable_storage_metrics = False
-        elif {disable!r} == "ucm":
-            launch["enable_metrics"] = False
         else:
-            launch.pop("metrics_config_path")
+            launch["enable_metrics"] = False
+        launch.pop("metrics_config_path")
         connector = start()
         assert connector._metrics_logger is None
         assert "prometheus_client" not in sys.modules
@@ -220,6 +219,25 @@ def test_vllm_only_yaml_rejected(tmp_path):
             raise AssertionError("Wrong consumer config accepted")
         assert events == []
     """,
+    )
+
+
+@pytest.mark.parametrize("contents", [None, "{}", "counter: ["])
+def test_invalid_explicit_config_does_not_fall_back(tmp_path, contents):
+    run_child(
+        tmp_path,
+        f"""
+        config_path.unlink()
+        if {contents!r} is not None:
+            config_path.write_text({contents!r}, encoding="utf-8")
+        try:
+            start()
+        except ValueError as error:
+            assert "No UCM metrics defined" in str(error)
+        else:
+            raise AssertionError("Invalid explicit config silently replaced by defaults")
+        assert events == []
+        """,
     )
 
 
@@ -323,6 +341,55 @@ def clock_calls(count):
     ticks = iter(v for i in range(count) for v in (i, i + 0.01))
     io_metrics.time = types.SimpleNamespace(perf_counter=lambda: next(ticks))
 """
+
+
+def test_builtin_config_exports_without_yaml_and_preserves_vllm(tmp_path):
+    run_child(
+        tmp_path,
+        IO_BOOTSTRAP
+        + r"""
+from copy import deepcopy
+from ucm.default_metrics_config import DEFAULT_METRICS_CONFIG, get_default_metrics_config
+from ucm.integration.sglang.default_metrics_config import get_default_sglang_metrics_config
+import ucm.metrics_config as metrics_config
+
+baseline = deepcopy(DEFAULT_METRICS_CONFIG)
+expected = yaml.safe_load(Path("examples/metrics/metrics_configs_sglang.yaml").read_text(encoding="utf-8"))
+assert get_default_sglang_metrics_config() == expected
+modified = get_default_sglang_metrics_config()
+modified["counter"][0]["name"] = "changed"
+modified["histogram"][-1]["buckets"].append(999999)
+modified["consumers"]["multiproc"] = False
+assert get_default_sglang_metrics_config() == expected
+assert DEFAULT_METRICS_CONFIG == baseline == get_default_metrics_config()
+
+launch.pop("metrics_config_path")
+config_path.unlink()
+def reject_yaml(*args, **kwargs):
+    raise AssertionError("Built-in metrics must not read YAML")
+metrics_config.load_metrics_config = reject_yaml
+yaml.safe_load = reject_yaml
+connector = make_connector()
+try:
+    assert connector._metrics_logger.config == expected
+    clock_calls(1)
+    assert connector.batch_get_v1(["a"], None) == [True]
+    deadline = time.monotonic() + 7
+    while time.monotonic() < deadline:
+        try:
+            if value("ucm:sglang_connector_load_bytes_total") == 128:
+                break
+        except AssertionError:
+            pass
+        time.sleep(0.02)
+    assert value("ucm:sglang_connector_load_requests_total") == 1
+    assert value("ucm:sglang_connector_load_bytes_total") == 128
+    assert value("ucm:sglang_connector_load_pages_count") == 1
+    assert DEFAULT_METRICS_CONFIG == baseline
+finally:
+    connector.close()
+""",
+    )
 
 
 def test_io_samples_export_across_tp_pp_workers(tmp_path):

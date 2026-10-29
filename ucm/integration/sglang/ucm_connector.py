@@ -29,8 +29,6 @@ def _create_metrics_logger(storage_config, launch_config):
     if not getattr(storage_config, "enable_storage_metrics", False):
         return None
     config_path = launch_config.get("metrics_config_path")
-    if not config_path:
-        return None
 
     from ucm.metrics_config import (
         consumer_enabled,
@@ -41,14 +39,21 @@ def _create_metrics_logger(storage_config, launch_config):
 
     if not metrics_enabled(launch_config):
         return None
-    config = load_metrics_config(config_path)
+    if config_path:
+        config = load_metrics_config(config_path)
+    else:
+        from ucm.integration.sglang.default_metrics_config import (
+            get_default_sglang_metrics_config,
+        )
+
+        config = get_default_sglang_metrics_config()
     if not get_metric_definitions(config):
         raise ValueError(f"No UCM metrics defined in {config_path}")
     if not consumer_enabled(config, "multiproc") or consumer_enabled(
         config, "vllm_connector"
     ):
         raise ValueError(
-            "SGLang metrics YAML must enable multiproc and disable vllm_connector"
+            "SGLang metrics config must enable multiproc and disable vllm_connector"
         )
     directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
     if not directory or not Path(directory).is_dir():
@@ -77,7 +82,7 @@ def _create_metrics_logger(storage_config, launch_config):
         for name in ("dp", "tp", "pp", "attn_cp")
     )
     return PrometheusStatsLogger(
-        storage_config.model_name or "", worker_id, config_path
+        storage_config.model_name or "", worker_id, config=config
     )
 
 

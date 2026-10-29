@@ -140,38 +140,16 @@
           "value": "$__all"
         },
         "options": []
-      },
-      {
-        "name": "perWorker",
-        "label": "UCM view",
-        "type": "custom",
-        "query": "Per worker : job\\, instance\\, model_name\\, worker_id,Per instance : job\\, instance\\, model_name",
-        "current": {
-          "text": "Per worker",
-          "value": "job, instance, model_name, worker_id"
-        },
-        "options": [
-          {
-            "text": "Per worker",
-            "value": "job, instance, model_name, worker_id",
-            "selected": true
-          },
-          {
-            "text": "Per instance",
-            "value": "job, instance, model_name",
-            "selected": false
-          }
-        ]
       }
     ]
   },
   "panels": [
     {
       "type": "text",
-      "title": "Scope and interpretation",
+      "title": "About this dashboard",
       "options": {
         "mode": "markdown",
-        "content": "SGLang serving overview with UCM storage metrics. Prefixes default to sglang: and ucm:; use sglang_ if your Prometheus renames the native prefix. Native panels use job / instance / model_name; worker_id applies to UCM panels only. Missing series remain No data. Posix task byte/duration samples can include failed tasks; they are not proof of successful persistence."
+        "content": "Serving performance and UCM summary. Native serving panels use job / instance / model_name; worker_id filters UCM metrics. Connector throughput counts successful bytes, while request duration includes failed attempts. Storage health=1 means the breaker is enabled, not that every I/O succeeded. Open HiCache for cache scheduling, or Connector & Store for physical I/O and backend diagnostics. Missing series remain No data."
       },
       "id": 1,
       "gridPos": {
@@ -179,6 +157,19 @@
         "y": 0,
         "w": 24,
         "h": 4
+      }
+    },
+    {
+      "type": "row",
+      "title": "SGLang / serving performance",
+      "collapsed": false,
+      "panels": [],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 1
       }
     },
     {
@@ -243,11 +234,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 5,
         "w": 12,
         "h": 8
       },
-      "id": 2,
+      "id": 3,
       "options": {
         "legend": {
           "calcs": [],
@@ -357,11 +348,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 4,
+        "y": 5,
         "w": 12,
         "h": 8
       },
-      "id": 3,
+      "id": 4,
       "maxDataPoints": 30,
       "options": {
         "calculate": false,
@@ -491,11 +482,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 8
       },
-      "id": 4,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [],
@@ -605,11 +596,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 13,
         "w": 12,
         "h": 8
       },
-      "id": 5,
+      "id": 6,
       "maxDataPoints": 30,
       "options": {
         "calculate": false,
@@ -744,11 +735,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 21,
         "w": 12,
         "h": 8
       },
-      "id": 6,
+      "id": 7,
       "options": {
         "legend": {
           "calcs": [],
@@ -847,11 +838,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 20,
+        "y": 21,
         "w": 12,
         "h": 8
       },
-      "id": 7,
+      "id": 8,
       "options": {
         "legend": {
           "calcs": [],
@@ -945,11 +936,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 29,
         "w": 12,
         "h": 8
       },
-      "id": 8,
+      "id": 9,
       "options": {
         "legend": {
           "calcs": [],
@@ -1047,11 +1038,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 28,
+        "y": 29,
         "w": 12,
         "h": 8
       },
-      "id": 9,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [],
@@ -1089,19 +1080,246 @@
     },
     {
       "type": "row",
-      "title": "UCM / Posix overview",
+      "title": "UCM / transfer and storage health",
       "collapsed": false,
       "panels": [],
-      "id": 10,
+      "id": 11,
       "gridPos": {
         "x": 0,
-        "y": 36,
+        "y": 37,
         "w": 24,
         "h": 1
       }
     },
     {
-      "title": "posix_store_health",
+      "title": "Successful transfer throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Successful bytes per second over the selected rate window, including idle time. Values are local to each worker.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "load bytes {{instance}} {{worker_id}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "dump bytes {{instance}} {{worker_id}}",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Storage submission and completion failures",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Failed calls per second, separated by load/dump and submit/wait. Missing series means no sample has been emitted; it is not replaced with zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_submit_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "load submit errors {{instance}} {{worker_id}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_wait_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "load wait errors {{instance}} {{worker_id}}",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_submit_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "dump submit errors {{instance}} {{worker_id}}",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_wait_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "dump wait errors {{instance}} {{worker_id}}",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Mean storage call duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Mean time from storage submission to confirmed completion, including failed attempts. Excludes earlier queueing, buffer preparation and restoration.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "load duration ms {{instance}} {{worker_id}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+          "legendFormat": "dump duration ms {{instance}} {{worker_id}}",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Posix storage health",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1161,16 +1379,16 @@
           "sort": "desc"
         }
       },
-      "id": 11,
+      "id": 15,
       "gridPos": {
-        "x": 0,
-        "y": 37,
+        "x": 12,
+        "y": 46,
         "w": 12,
         "h": 8
       }
     },
     {
-      "title": "posix_gc_running",
+      "title": "Posix garbage collection",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1215,124 +1433,16 @@
           "sort": "desc"
         }
       },
-      "id": 12,
-      "gridPos": {
-        "x": 12,
-        "y": 37,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "title": "posix_h2s_bytes_total / rate",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Total bytes transferred from host buffer to posix storage (dump path, summed per completed task)\n\nMissing series means not emitted, not zero.",
-      "targets": [
-        {
-          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}posix_h2s_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-          "legendFormat": "__auto",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "instant": false,
-          "range": true,
-          "format": "time_series"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "noValue": "No data",
-          "custom": {
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 13,
+      "id": 16,
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 54,
         "w": 12,
         "h": 8
       }
     },
     {
-      "title": "posix_s2h_bytes_total / rate",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Total bytes transferred from posix storage to host buffer (load path, summed per completed task)\n\nMissing series means not emitted, not zero.",
-      "targets": [
-        {
-          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}posix_s2h_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-          "legendFormat": "__auto",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "instant": false,
-          "range": true,
-          "format": "time_series"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "noValue": "No data",
-          "custom": {
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 14,
-      "gridPos": {
-        "x": 12,
-        "y": 45,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "title": "posix_io_errors_total / rate",
+      "title": "Posix I/O error rate",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1377,64 +1487,10 @@
           "sort": "desc"
         }
       },
-      "id": 15,
-      "gridPos": {
-        "x": 0,
-        "y": 53,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "title": "posix_passive_failures_total / rate",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Number of failed Posix IO tasks observed by passive health detection\n\nMissing series means not emitted, not zero.",
-      "targets": [
-        {
-          "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}posix_passive_failures_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-          "legendFormat": "__auto",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "instant": false,
-          "range": true,
-          "format": "time_series"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "noValue": "No data",
-          "custom": {
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 16,
+      "id": 17,
       "gridPos": {
         "x": 12,
-        "y": 53,
+        "y": 54,
         "w": 12,
         "h": 8
       }
@@ -1451,32 +1507,8 @@
     },
     {
       "type": "link",
-      "title": "SGLang + UCM / Store",
+      "title": "SGLang + UCM / Connector & Store",
       "url": "/d/sglang-ucm-store",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false
-    },
-    {
-      "type": "link",
-      "title": "SGLang + UCM / DRAM",
-      "url": "/d/sglang-ucm-dram",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false
-    },
-    {
-      "type": "link",
-      "title": "SGLang + UCM / KV Client",
-      "url": "/d/sglang-ucm-kv-client",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false
-    },
-    {
-      "type": "link",
-      "title": "UCM / vLLM Connector Reference (not emitted by SGLang)",
-      "url": "/d/sglang-ucm-connector-ref",
       "includeVars": true,
       "keepTime": true,
       "targetBlank": false

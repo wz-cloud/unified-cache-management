@@ -36,16 +36,6 @@
         }
       },
       {
-        "name": "ucm_prefix",
-        "label": "UCM prefix",
-        "type": "textbox",
-        "query": "ucm:",
-        "current": {
-          "text": "ucm:",
-          "value": "ucm:"
-        }
-      },
-      {
         "name": "job",
         "label": "job",
         "type": "query",
@@ -54,10 +44,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\"}, job)",
+          "query": "label_values({__name__=~\"${sglang_prefix}.*\"}, job)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\"}, job)",
+        "definition": "label_values({__name__=~\"${sglang_prefix}.*\"}, job)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -78,10 +68,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\"}, instance)",
+          "query": "label_values({__name__=~\"${sglang_prefix}.*\",job=~\"$job\"}, instance)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\"}, instance)",
+        "definition": "label_values({__name__=~\"${sglang_prefix}.*\",job=~\"$job\"}, instance)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -92,76 +82,6 @@
           "value": "$__all"
         },
         "options": []
-      },
-      {
-        "name": "model_name",
-        "label": "model_name",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "query": {
-          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\"}, model_name)",
-          "refId": "StandardVariableQuery"
-        },
-        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\"}, model_name)",
-        "refresh": 2,
-        "sort": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "options": []
-      },
-      {
-        "name": "worker_id",
-        "label": "worker_id",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "query": {
-          "query": "label_values({__name__=~\"${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\"}, worker_id)",
-          "refId": "StandardVariableQuery"
-        },
-        "definition": "label_values({__name__=~\"${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\"}, worker_id)",
-        "refresh": 2,
-        "sort": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "options": []
-      },
-      {
-        "name": "perWorker",
-        "label": "UCM view",
-        "type": "custom",
-        "query": "Per worker : job\\, instance\\, model_name\\, worker_id,Per instance : job\\, instance\\, model_name",
-        "current": {
-          "text": "Per worker",
-          "value": "job, instance, model_name, worker_id"
-        },
-        "options": [
-          {
-            "text": "Per worker",
-            "value": "job, instance, model_name, worker_id",
-            "selected": true
-          },
-          {
-            "text": "Per instance",
-            "value": "job, instance, model_name",
-            "selected": false
-          }
-        ]
       },
       {
         "name": "tp_rank",
@@ -240,10 +160,10 @@
   "panels": [
     {
       "type": "text",
-      "title": "Scope and interpretation",
+      "title": "About this dashboard",
       "options": {
         "mode": "markdown",
-        "content": "SGLang native HiCache metrics. L2 is device ↔ host; L3 is host ↔ storage. Native cache metrics use tp_rank / pp_rank / dp_rank, not UCM worker_id. Rank filters below apply here; model_name and UCM worker_id do not filter native cache collectors. Keep token counts per rank to avoid multiplying logical tokens by TP size. UCM connector rows use worker_id/model_name and read ucm:sglang_connector_* directly; they do not use HiCache get_stats(). Successful pool-call pages and GB/s are distinct from attempt durations (including errors). V2 counts are per pool, not unique logical pages across pools."
+        "content": "HiCache scheduling and cache behavior only: L2 device/host transfers, eviction, and L3 prefetch/backup. Use job, instance and TP/PP/DP rank filters. Token counts retain rank and pool dimensions and are not globally deduplicated. Physical UCM storage-call metrics are on the Connector & Store dashboard. No Linker-specific metrics are included. Missing series remain No data."
       },
       "id": 1,
       "gridPos": {
@@ -255,388 +175,9 @@
     },
     {
       "type": "row",
-      "title": "L3 storage prefetch / backup",
-      "collapsed": true,
-      "panels": [
-        {
-          "title": "prefetched_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Prompt tokens successfully transferred from L3 storage into host memory, before admission-time reuse or discard.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetched_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 3,
-          "gridPos": {
-            "x": 0,
-            "y": 5,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "backuped_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Number of backuped tokens.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backuped_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 4,
-          "gridPos": {
-            "x": 12,
-            "y": 5,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "storage_prefetch_hit_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Storage-hit tokens returned by an L3 query before host allocation, transfer, or cache insertion.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}storage_prefetch_hit_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 5,
-          "gridPos": {
-            "x": 0,
-            "y": 13,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "storage_prefetch_unfulfilled_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Attempt-level storage-hit tokens that did not become a usable prefetch result, by diagnostic reason. This is not a final prefill cache-miss counter. anchor_lost means the original device prefix was no longer present when the prefetch needed it; aux_window_trim means a staged aux trailing window could not be trimmed to the shorter splice, so the loaded span was released; device_overlap means the live device prefix diverged from the request's view at splice time, so the span beyond it was released; cache_admission_shortfall means an L3-loaded L2 span was no longer reusable when cache-mode admission ran; deadline means the storage prefetch stop policy ended the read before it completed.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}storage_prefetch_unfulfilled_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 6,
-          "gridPos": {
-            "x": 12,
-            "y": 13,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "storage_prefetch_deferred_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Storage-prefetch token-attempts deferred for later reuse, by transient capacity reason.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}storage_prefetch_deferred_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 7,
-          "gridPos": {
-            "x": 0,
-            "y": 21,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "hicache_backup_dropped_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Buffer-mode backup tokens that never reached L3 because admission rejected them or the source became stale before the D2H staging launched; the write path lagging device churn is the common cause, and the span rewrites only on a later recompute.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_dropped_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 8,
-          "gridPos": {
-            "x": 12,
-            "y": 21,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "hicache_prefetch_aux_alloc_failed_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Prefetch tokens abandoned because an aux pool (e.g. the SWA trailing window) could not allocate host staging — the whole storage fetch is forfeited, not just the aux part.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_prefetch_aux_alloc_failed_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 9,
-          "gridPos": {
-            "x": 0,
-            "y": 29,
-            "w": 12,
-            "h": 8
-          }
-        }
-      ],
+      "title": "L2 host cache / load, backup and eviction",
+      "collapsed": false,
+      "panels": [],
       "id": 2,
       "gridPos": {
         "x": 0,
@@ -646,625 +187,1002 @@
       }
     },
     {
-      "type": "row",
-      "title": "L2 host cache / eviction",
-      "collapsed": true,
-      "panels": [
+      "title": "Host cache eviction duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "End-to-end time of a device eviction pass in seconds; under --hicache-write-policy write_back this includes the blocking D->H backup (see sglang:hicache_backup_duration_seconds for the copy alone).\n\nMissing series means not emitted, not zero.",
+      "targets": [
         {
-          "title": "eviction_duration_seconds / distribution",
-          "type": "timeseries",
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "End-to-end time of a device eviction pass in seconds; under --hicache-write-policy write_back this includes the blocking D->H backup (see sglang:hicache_backup_duration_seconds for the copy alone).\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 11,
-          "gridPos": {
-            "x": 0,
-            "y": 6,
-            "w": 12,
-            "h": 8
-          }
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         },
         {
-          "title": "evicted_tokens_total / rate",
-          "type": "timeseries",
+          "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "B",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "The number of device KV token slots freed by eviction, regardless of whether the data was backed up to host (see sglang:hicache_backup_tokens_total) or destroyed (see sglang:hicache_dropped_tokens_total).\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}evicted_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 12,
-          "gridPos": {
-            "x": 12,
-            "y": 6,
-            "w": 12,
-            "h": 8
-          }
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         },
         {
-          "title": "load_back_duration_seconds / distribution",
-          "type": "timeseries",
+          "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "C",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "GPU-stream span of a merged host-to-device load-back copy loop, including gaps between per-layer I/O submissions but excluding pre-transfer queue and fence waits.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 13,
-          "gridPos": {
-            "x": 0,
-            "y": 14,
-            "w": 12,
-            "h": 8
-          }
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         },
         {
-          "title": "load_back_tokens_total / rate",
-          "type": "timeseries",
+          "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}eviction_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "D",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "The number of tokens loaded back from local host DRAM (L2) to GPU, by host pool (kv, swa, mamba, ...). Every TP rank reports the same logical count under its own rank labels; read one rank rather than summing ranks.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 14,
-          "gridPos": {
-            "x": 12,
-            "y": 14,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "hicache_backup_duration_seconds / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Time taken to back up KV cache from GPU to local host DRAM (L2) in seconds, per merged write op. Covers all D->H backups regardless of --hicache-write-policy. Distinct from the host-to-storage (L3) sglang:backuped_tokens_total.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 15,
-          "gridPos": {
-            "x": 0,
-            "y": 22,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "hicache_backup_bytes_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Bytes backed up from GPU to local host DRAM (L2), all pools combined, including draft/sidecar transfers that the token counter excludes. Each rank reports its own KV shard; sum ranks for the physical total. A window's byte delta divided by the same window's hicache_backup_duration_seconds sum is the bytes-weighted active bandwidth; the plain rate is wall-clock payload traffic that includes idle time.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_bytes_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 16,
-          "gridPos": {
-            "x": 12,
-            "y": 22,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "load_back_bytes_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Bytes loaded back from local host DRAM (L2) to GPU, all pools combined, including draft/sidecar transfers that the token counter excludes. Each rank reports its own KV shard; sum ranks for the physical total. A window's byte delta divided by the same window's load_back_duration_seconds sum is the bytes-weighted active bandwidth; the plain rate is wall-clock payload traffic that includes idle time.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_bytes_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 17,
-          "gridPos": {
-            "x": 0,
-            "y": 30,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "hicache_backup_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "The number of tokens backed up from GPU to local host DRAM (L2), by host pool (kv, swa, mamba, ...). Covers all D->H backups regardless of --hicache-write-policy. Distinct from the host-to-storage (L3) sglang:backuped_tokens_total. Every TP rank reports the same logical count under its own rank labels; read one rank rather than summing ranks.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 18,
-          "gridPos": {
-            "x": 12,
-            "y": 30,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "hicache_dropped_tokens_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "The number of logical device KV tokens destroyed without a host backup. The pool label is always kv; reason is host_pressure for write-back failure, or write_through_unbacked_eviction when eager write-through did not complete before eviction.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_dropped_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 19,
-          "gridPos": {
-            "x": 0,
-            "y": 38,
-            "w": 12,
-            "h": 8
-          }
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
         }
       ],
-      "id": 10,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 3,
       "gridPos": {
         "x": 0,
         "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Evicted host-cache tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The number of device KV token slots freed by eviction, regardless of whether the data was backed up to host (see sglang:hicache_backup_tokens_total) or destroyed (see sglang:hicache_dropped_tokens_total).\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}evicted_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Host-to-device load duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "GPU-stream span of a merged host-to-device load-back copy loop, including gaps between per-layer I/O submissions but excluding pre-transfer queue and fence waits.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Host-to-device loaded tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The number of tokens loaded back from local host DRAM (L2) to GPU, by host pool (kv, swa, mamba, ...). Every TP rank reports the same logical count under its own rank labels; read one rank rather than summing ranks.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Device-to-host backup duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Time taken to back up KV cache from GPU to local host DRAM (L2) in seconds, per merged write op. Covers all D->H backups regardless of --hicache-write-policy. Distinct from the host-to-storage (L3) sglang:backuped_tokens_total.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_duration_seconds_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Device-to-host backup throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Bytes backed up from GPU to local host DRAM (L2), all pools combined, including draft/sidecar transfers that the token counter excludes. Each rank reports its own KV shard; sum ranks for the physical total. A window's byte delta divided by the same window's hicache_backup_duration_seconds sum is the bytes-weighted active bandwidth; the plain rate is wall-clock payload traffic that includes idle time.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_bytes_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Host-to-device load throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Bytes loaded back from local host DRAM (L2) to GPU, all pools combined, including draft/sidecar transfers that the token counter excludes. Each rank reports its own KV shard; sum ranks for the physical total. A window's byte delta divided by the same window's load_back_duration_seconds sum is the bytes-weighted active bandwidth; the plain rate is wall-clock payload traffic that includes idle time.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}load_back_bytes_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Device-to-host backed-up tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The number of tokens backed up from GPU to local host DRAM (L2), by host pool (kv, swa, mamba, ...). Covers all D->H backups regardless of --hicache-write-policy. Distinct from the host-to-storage (L3) sglang:backuped_tokens_total. Every TP rank reports the same logical count under its own rank labels; read one rank rather than summing ranks.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Dropped host-cache tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The number of logical device KV tokens destroyed without a host backup. The pool label is always kv; reason is host_pressure for write-back failure, or write_through_unbacked_eviction when eager write-through did not complete before eviction.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_dropped_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "L3 storage / prefetch and backup",
+      "collapsed": false,
+      "panels": [],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
         "w": 24,
         "h": 1
       }
     },
     {
+      "title": "L3 prefetched tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Prompt tokens successfully transferred from L3 storage into host memory, before admission-time reuse or discard.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetched_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "L3 backed-up tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Number of backuped tokens.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backuped_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 12,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "L3 prefetch hits",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Storage-hit tokens returned by an L3 query before host allocation, transfer, or cache insertion.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}storage_prefetch_hit_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "L3 unfulfilled prefetch",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Attempt-level storage-hit tokens that did not become a usable prefetch result, by diagnostic reason. This is not a final prefill cache-miss counter. anchor_lost means the original device prefix was no longer present when the prefetch needed it; aux_window_trim means a staged aux trailing window could not be trimmed to the shorter splice, so the loaded span was released; device_overlap means the live device prefix diverged from the request's view at splice time, so the span beyond it was released; cache_admission_shortfall means an L3-loaded L2 span was no longer reusable when cache-mode admission ran; deadline means the storage prefetch stop policy ended the read before it completed.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}storage_prefetch_unfulfilled_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 16,
+      "gridPos": {
+        "x": 12,
+        "y": 54,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "L3 deferred prefetch",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Storage-prefetch token-attempts deferred for later reuse, by transient capacity reason.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}storage_prefetch_deferred_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Dropped L3 backup tokens",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Buffer-mode backup tokens that never reached L3 because admission rejected them or the source became stale before the D2H staging launched; the write path lagging device churn is the common cause, and the span rewrites only on a later recompute.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_backup_dropped_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "x": 12,
+        "y": 62,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Prefetch auxiliary allocation failures",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Prefetch tokens abandoned because an aux pool (e.g. the SWA trailing window) could not allocate host staging — the whole storage fetch is forfeited, not just the aux part.\n\nMissing series means not emitted, not zero.",
+      "targets": [
+        {
+          "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}hicache_prefetch_aux_alloc_failed_tokens_total{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: tokens/s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 19,
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
       "type": "row",
-      "title": "HiCache / counter totals",
+      "title": "HiCache / cumulative counters and observations",
       "collapsed": true,
       "panels": [
         {
@@ -1306,25 +1224,11 @@
           "id": 21,
           "gridPos": {
             "x": 0,
-            "y": 7,
-            "w": 12,
+            "y": 79,
+            "w": 24,
             "h": 8
           }
-        }
-      ],
-      "id": 20,
-      "gridPos": {
-        "x": 0,
-        "y": 6,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "row",
-      "title": "HiCache / histogram totals",
-      "collapsed": true,
-      "panels": [
+        },
         {
           "title": "HiCache cumulative histogram",
           "type": "table",
@@ -1361,1153 +1265,19 @@
           "options": {
             "showHeader": true
           },
-          "id": 23,
+          "id": 22,
           "gridPos": {
             "x": 0,
-            "y": 8,
-            "w": 12,
+            "y": 87,
+            "w": 24,
             "h": 8
           }
         }
       ],
-      "id": 22,
+      "id": 20,
       "gridPos": {
         "x": 0,
-        "y": 7,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "row",
-      "title": "UCM connector storage calls / additional counter metrics",
-      "collapsed": true,
-      "panels": [
-        {
-          "title": "sglang_connector_load_requests_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Physical storage transfer calls attempted, per worker and pool or layer\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_requests_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 25,
-          "gridPos": {
-            "x": 0,
-            "y": 9,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_load_bytes_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Bytes transferred by successful storage calls, local to this worker\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 26,
-          "gridPos": {
-            "x": 12,
-            "y": 9,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_load_submit_errors_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Storage submission failures\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_submit_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 27,
-          "gridPos": {
-            "x": 0,
-            "y": 17,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_load_wait_errors_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Storage completion wait failures\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_wait_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 28,
-          "gridPos": {
-            "x": 12,
-            "y": 17,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_requests_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Physical storage transfer calls attempted, per worker and pool or layer\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_requests_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 29,
-          "gridPos": {
-            "x": 0,
-            "y": 25,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_bytes_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Bytes transferred by successful storage calls, local to this worker\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 30,
-          "gridPos": {
-            "x": 12,
-            "y": 25,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_submit_errors_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Storage submission failures\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_submit_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 31,
-          "gridPos": {
-            "x": 0,
-            "y": 33,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_wait_errors_total / rate",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Storage completion wait failures\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_wait_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 32,
-          "gridPos": {
-            "x": 12,
-            "y": 33,
-            "w": 12,
-            "h": 8
-          }
-        }
-      ],
-      "id": 24,
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "row",
-      "title": "UCM connector storage calls / additional histogram metrics",
-      "collapsed": true,
-      "panels": [
-        {
-          "title": "sglang_connector_load_pages / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Successful storage batch size in pool pages; not deduplicated across TP/PP, pools or layers\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "Mean {{instance}} {{worker_id}}",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P50 {{instance}} {{worker_id}}",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P95 {{instance}} {{worker_id}}",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P99 {{instance}} {{worker_id}}",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 34,
-          "gridPos": {
-            "x": 0,
-            "y": 10,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_load_duration_ms / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Storage submission-to-completion duration including failed attempts (ms); excludes buffer preparation and restoration\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "Mean {{instance}} {{worker_id}}",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P50 {{instance}} {{worker_id}}",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P95 {{instance}} {{worker_id}}",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P99 {{instance}} {{worker_id}}",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 35,
-          "gridPos": {
-            "x": 12,
-            "y": 10,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_load_bandwidth_gbps / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector load: Successful call bytes divided by storage submission-to-completion time (GB/s, decimal bytes); not device-to-storage end-to-end bandwidth\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "Mean {{instance}} {{worker_id}}",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P50 {{instance}} {{worker_id}}",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P95 {{instance}} {{worker_id}}",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P99 {{instance}} {{worker_id}}",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "suffix:GB/s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 36,
-          "gridPos": {
-            "x": 0,
-            "y": 18,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_pages / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Successful storage batch size in pool pages; not deduplicated across TP/PP, pools or layers\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "Mean {{instance}} {{worker_id}}",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P50 {{instance}} {{worker_id}}",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P95 {{instance}} {{worker_id}}",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P99 {{instance}} {{worker_id}}",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 37,
-          "gridPos": {
-            "x": 12,
-            "y": 18,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_duration_ms / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Storage submission-to-completion duration including failed attempts (ms); excludes buffer preparation and restoration\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "Mean {{instance}} {{worker_id}}",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P50 {{instance}} {{worker_id}}",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P95 {{instance}} {{worker_id}}",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P99 {{instance}} {{worker_id}}",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 38,
-          "gridPos": {
-            "x": 0,
-            "y": 26,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "sglang_connector_dump_bandwidth_gbps / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "SGLang connector dump: Successful call bytes divided by storage submission-to-completion time (GB/s, decimal bytes); not device-to-storage end-to-end bandwidth\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
-              "legendFormat": "Mean {{instance}} {{worker_id}}",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P50 {{instance}} {{worker_id}}",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P95 {{instance}} {{worker_id}}",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
-              "legendFormat": "P99 {{instance}} {{worker_id}}",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "suffix:GB/s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 39,
-          "gridPos": {
-            "x": 12,
-            "y": 26,
-            "w": 12,
-            "h": 8
-          }
-        }
-      ],
-      "id": 33,
-      "gridPos": {
-        "x": 0,
-        "y": 9,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "row",
-      "title": "UCM connector storage calls / counter totals",
-      "collapsed": true,
-      "panels": [
-        {
-          "title": "UCM connector storage calls / cumulative counter samples",
-          "type": "table",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Cumulative values since worker start. Histogram count is the number of observations, not a success count.",
-          "targets": [
-            {
-              "expr": "{__name__=~\"${ucm_prefix}(sglang_connector_load_requests_total|sglang_connector_load_bytes_total|sglang_connector_load_submit_errors_total|sglang_connector_load_wait_errors_total|sglang_connector_dump_requests_total|sglang_connector_dump_bytes_total|sglang_connector_dump_submit_errors_total|sglang_connector_dump_wait_errors_total)\",job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": true,
-              "range": false,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "showHeader": true
-          },
-          "id": 41,
-          "gridPos": {
-            "x": 0,
-            "y": 11,
-            "w": 12,
-            "h": 8
-          }
-        }
-      ],
-      "id": 40,
-      "gridPos": {
-        "x": 0,
-        "y": 10,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "row",
-      "title": "UCM connector storage calls / histogram totals",
-      "collapsed": true,
-      "panels": [
-        {
-          "title": "UCM connector storage calls / cumulative histogram samples",
-          "type": "table",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Cumulative values since worker start. Histogram count is the number of observations, not a success count.",
-          "targets": [
-            {
-              "expr": "{__name__=~\"${ucm_prefix}(sglang_connector_load_pages_count|sglang_connector_load_duration_ms_count|sglang_connector_load_bandwidth_gbps_count|sglang_connector_dump_pages_count|sglang_connector_dump_duration_ms_count|sglang_connector_dump_bandwidth_gbps_count)\",job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": true,
-              "range": false,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "showHeader": true
-          },
-          "id": 43,
-          "gridPos": {
-            "x": 0,
-            "y": 12,
-            "w": 12,
-            "h": 8
-          }
-        }
-      ],
-      "id": 42,
-      "gridPos": {
-        "x": 0,
-        "y": 11,
+        "y": 78,
         "w": 24,
         "h": 1
       }
@@ -2524,32 +1294,8 @@
     },
     {
       "type": "link",
-      "title": "SGLang + UCM / Store",
+      "title": "SGLang + UCM / Connector & Store",
       "url": "/d/sglang-ucm-store",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false
-    },
-    {
-      "type": "link",
-      "title": "SGLang + UCM / DRAM",
-      "url": "/d/sglang-ucm-dram",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false
-    },
-    {
-      "type": "link",
-      "title": "SGLang + UCM / KV Client",
-      "url": "/d/sglang-ucm-kv-client",
-      "includeVars": true,
-      "keepTime": true,
-      "targetBlank": false
-    },
-    {
-      "type": "link",
-      "title": "UCM / vLLM Connector Reference (not emitted by SGLang)",
-      "url": "/d/sglang-ucm-connector-ref",
       "includeVars": true,
       "keepTime": true,
       "targetBlank": false
