@@ -243,7 +243,7 @@
       "title": "Scope and interpretation",
       "options": {
         "mode": "markdown",
-        "content": "SGLang native HiCache metrics. L2 is device ↔ host; L3 is host ↔ storage. Native cache metrics use tp_rank / pp_rank / dp_rank, not UCM worker_id. Rank filters below apply here; model_name and UCM worker_id do not filter native cache collectors. Keep token counts per rank to avoid multiplying logical tokens by TP size. Backend-dependent prefetch/backup histograms may remain empty."
+        "content": "SGLang native HiCache metrics. L2 is device ↔ host; L3 is host ↔ storage. Native cache metrics use tp_rank / pp_rank / dp_rank, not UCM worker_id. Rank filters below apply here; model_name and UCM worker_id do not filter native cache collectors. Keep token counts per rank to avoid multiplying logical tokens by TP size. UCM connector rows use worker_id/model_name and read ucm:sglang_connector_* directly; they do not use HiCache get_stats(). Successful pool-call pages and GB/s are distinct from attempt durations (including errors). V2 counts are per pool, not unique logical pages across pools."
       },
       "id": 1,
       "gridPos": {
@@ -635,378 +635,6 @@
             "w": 12,
             "h": 8
           }
-        },
-        {
-          "title": "prefetch_pgs / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Histogram of prefetch pages of batches.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_pgs_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_pgs_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_pgs_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_pgs_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_pgs_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 10,
-          "gridPos": {
-            "x": 12,
-            "y": 29,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "backup_pgs / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Histogram of backup pages of batches.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_pgs_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_pgs_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_pgs_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_pgs_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_pgs_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 11,
-          "gridPos": {
-            "x": 0,
-            "y": 37,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "prefetch_bandwidth / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Histogram of per-op L3 prefetch wire bandwidth in GB/s: transferred bytes (compressed size when KV compression is on) over the op's IO wall time.\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_bandwidth_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_bandwidth_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_bandwidth_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_bandwidth_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}prefetch_bandwidth_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "suffix:GB/s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 12,
-          "gridPos": {
-            "x": 12,
-            "y": 37,
-            "w": 12,
-            "h": 8
-          }
-        },
-        {
-          "title": "backup_bandwidth / distribution",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Histogram of per-op L3 backup wire bandwidth in GB/s: transferred bytes over the op's IO wall time, excluding pages the backend already held (the log line's processing_throughput includes them).\n\nMissing series means not emitted, not zero.",
-          "targets": [
-            {
-              "expr": "sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_bandwidth_sum{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])) / sum by (job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_bandwidth_count{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval]))",
-              "legendFormat": "__auto",
-              "refId": "A",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.5, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_bandwidth_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "B",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_bandwidth_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "C",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job, instance, tp_rank, pp_rank, dp_rank, pool, reason, storage_backend, cache_type) (rate(${sglang_prefix}backup_bandwidth_bucket{job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}[$__rate_interval])))",
-              "legendFormat": "__auto",
-              "refId": "D",
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "instant": false,
-              "range": true,
-              "format": "time_series"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "suffix:GB/s",
-              "noValue": "No data",
-              "custom": {
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "id": 13,
-          "gridPos": {
-            "x": 0,
-            "y": 45,
-            "w": 12,
-            "h": 8
-          }
         }
       ],
       "id": 2,
@@ -1107,7 +735,7 @@
               "sort": "desc"
             }
           },
-          "id": 15,
+          "id": 11,
           "gridPos": {
             "x": 0,
             "y": 6,
@@ -1161,7 +789,7 @@
               "sort": "desc"
             }
           },
-          "id": 16,
+          "id": 12,
           "gridPos": {
             "x": 12,
             "y": 6,
@@ -1254,7 +882,7 @@
               "sort": "desc"
             }
           },
-          "id": 17,
+          "id": 13,
           "gridPos": {
             "x": 0,
             "y": 14,
@@ -1308,7 +936,7 @@
               "sort": "desc"
             }
           },
-          "id": 18,
+          "id": 14,
           "gridPos": {
             "x": 12,
             "y": 14,
@@ -1401,7 +1029,7 @@
               "sort": "desc"
             }
           },
-          "id": 19,
+          "id": 15,
           "gridPos": {
             "x": 0,
             "y": 22,
@@ -1455,7 +1083,7 @@
               "sort": "desc"
             }
           },
-          "id": 20,
+          "id": 16,
           "gridPos": {
             "x": 12,
             "y": 22,
@@ -1509,7 +1137,7 @@
               "sort": "desc"
             }
           },
-          "id": 21,
+          "id": 17,
           "gridPos": {
             "x": 0,
             "y": 30,
@@ -1563,7 +1191,7 @@
               "sort": "desc"
             }
           },
-          "id": 22,
+          "id": 18,
           "gridPos": {
             "x": 12,
             "y": 30,
@@ -1617,7 +1245,7 @@
               "sort": "desc"
             }
           },
-          "id": 23,
+          "id": 19,
           "gridPos": {
             "x": 0,
             "y": 38,
@@ -1626,7 +1254,7 @@
           }
         }
       ],
-      "id": 14,
+      "id": 10,
       "gridPos": {
         "x": 0,
         "y": 5,
@@ -1675,7 +1303,7 @@
           "options": {
             "showHeader": true
           },
-          "id": 25,
+          "id": 21,
           "gridPos": {
             "x": 0,
             "y": 7,
@@ -1684,7 +1312,7 @@
           }
         }
       ],
-      "id": 24,
+      "id": 20,
       "gridPos": {
         "x": 0,
         "y": 6,
@@ -1707,7 +1335,7 @@
           "description": "Cumulative samples per rank; logical token counts must not be summed across TP ranks.",
           "targets": [
             {
-              "expr": "{__name__=~\"${sglang_prefix}(prefetch_pgs_count|backup_pgs_count|prefetch_bandwidth_count|backup_bandwidth_count|eviction_duration_seconds_count|load_back_duration_seconds_count|hicache_backup_duration_seconds_count)\",job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}",
+              "expr": "{__name__=~\"${sglang_prefix}(eviction_duration_seconds_count|load_back_duration_seconds_count|hicache_backup_duration_seconds_count)\",job=~\"$job\",instance=~\"$instance\",tp_rank=~\"$tp_rank\",pp_rank=~\"$pp_rank\",dp_rank=~\"$dp_rank\"}",
               "legendFormat": "__auto",
               "refId": "A",
               "datasource": {
@@ -1733,7 +1361,7 @@
           "options": {
             "showHeader": true
           },
-          "id": 27,
+          "id": 23,
           "gridPos": {
             "x": 0,
             "y": 8,
@@ -1742,10 +1370,1144 @@
           }
         }
       ],
-      "id": 26,
+      "id": 22,
       "gridPos": {
         "x": 0,
         "y": 7,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "row",
+      "title": "UCM connector storage calls / additional counter metrics",
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "sglang_connector_load_requests_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Physical storage transfer calls attempted, per worker and pool or layer\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_requests_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 25,
+          "gridPos": {
+            "x": 0,
+            "y": 9,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_load_bytes_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Bytes transferred by successful storage calls, local to this worker\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 26,
+          "gridPos": {
+            "x": 12,
+            "y": 9,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_load_submit_errors_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Storage submission failures\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_submit_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 27,
+          "gridPos": {
+            "x": 0,
+            "y": 17,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_load_wait_errors_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Storage completion wait failures\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_wait_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 28,
+          "gridPos": {
+            "x": 12,
+            "y": 17,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_requests_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Physical storage transfer calls attempted, per worker and pool or layer\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_requests_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 29,
+          "gridPos": {
+            "x": 0,
+            "y": 25,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_bytes_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Bytes transferred by successful storage calls, local to this worker\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bytes_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 30,
+          "gridPos": {
+            "x": 12,
+            "y": 25,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_submit_errors_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Storage submission failures\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_submit_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 31,
+          "gridPos": {
+            "x": 0,
+            "y": 33,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_wait_errors_total / rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Storage completion wait failures\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_wait_errors_total{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 32,
+          "gridPos": {
+            "x": 12,
+            "y": 33,
+            "w": 12,
+            "h": 8
+          }
+        }
+      ],
+      "id": 24,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "row",
+      "title": "UCM connector storage calls / additional histogram metrics",
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "sglang_connector_load_pages / distribution",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Successful storage batch size in pool pages; not deduplicated across TP/PP, pools or layers\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "Mean {{instance}} {{worker_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P50 {{instance}} {{worker_id}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P95 {{instance}} {{worker_id}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P99 {{instance}} {{worker_id}}",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 34,
+          "gridPos": {
+            "x": 0,
+            "y": 10,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_load_duration_ms / distribution",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Storage submission-to-completion duration including failed attempts (ms); excludes buffer preparation and restoration\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "Mean {{instance}} {{worker_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P50 {{instance}} {{worker_id}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P95 {{instance}} {{worker_id}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P99 {{instance}} {{worker_id}}",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 35,
+          "gridPos": {
+            "x": 12,
+            "y": 10,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_load_bandwidth_gbps / distribution",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector load: Successful call bytes divided by storage submission-to-completion time (GB/s, decimal bytes); not device-to-storage end-to-end bandwidth\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "Mean {{instance}} {{worker_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P50 {{instance}} {{worker_id}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P95 {{instance}} {{worker_id}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_load_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P99 {{instance}} {{worker_id}}",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "suffix:GB/s",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 36,
+          "gridPos": {
+            "x": 0,
+            "y": 18,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_pages / distribution",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Successful storage batch size in pool pages; not deduplicated across TP/PP, pools or layers\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "Mean {{instance}} {{worker_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P50 {{instance}} {{worker_id}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P95 {{instance}} {{worker_id}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_pages_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P99 {{instance}} {{worker_id}}",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 37,
+          "gridPos": {
+            "x": 12,
+            "y": 18,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_duration_ms / distribution",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Storage submission-to-completion duration including failed attempts (ms); excludes buffer preparation and restoration\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "Mean {{instance}} {{worker_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P50 {{instance}} {{worker_id}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P95 {{instance}} {{worker_id}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_duration_ms_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P99 {{instance}} {{worker_id}}",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 38,
+          "gridPos": {
+            "x": 0,
+            "y": 26,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "title": "sglang_connector_dump_bandwidth_gbps / distribution",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "SGLang connector dump: Successful call bytes divided by storage submission-to-completion time (GB/s, decimal bytes); not device-to-storage end-to-end bandwidth\n\nMissing series means not emitted, not zero.",
+          "targets": [
+            {
+              "expr": "sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_sum{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])) / sum by (job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_count{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval]))",
+              "legendFormat": "Mean {{instance}} {{worker_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.5, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P50 {{instance}} {{worker_id}}",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P95 {{instance}} {{worker_id}}",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job, instance, model_name, worker_id) (rate(${ucm_prefix}sglang_connector_dump_bandwidth_gbps_bucket{job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}[$__rate_interval])))",
+              "legendFormat": "P99 {{instance}} {{worker_id}}",
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": false,
+              "range": true,
+              "format": "time_series"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "suffix:GB/s",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 39,
+          "gridPos": {
+            "x": 12,
+            "y": 26,
+            "w": 12,
+            "h": 8
+          }
+        }
+      ],
+      "id": 33,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "row",
+      "title": "UCM connector storage calls / counter totals",
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "UCM connector storage calls / cumulative counter samples",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Cumulative values since worker start. Histogram count is the number of observations, not a success count.",
+          "targets": [
+            {
+              "expr": "{__name__=~\"${ucm_prefix}(sglang_connector_load_requests_total|sglang_connector_load_bytes_total|sglang_connector_load_submit_errors_total|sglang_connector_load_wait_errors_total|sglang_connector_dump_requests_total|sglang_connector_dump_bytes_total|sglang_connector_dump_submit_errors_total|sglang_connector_dump_wait_errors_total)\",job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true
+          },
+          "id": 41,
+          "gridPos": {
+            "x": 0,
+            "y": 11,
+            "w": 12,
+            "h": 8
+          }
+        }
+      ],
+      "id": 40,
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "row",
+      "title": "UCM connector storage calls / histogram totals",
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "UCM connector storage calls / cumulative histogram samples",
+          "type": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Cumulative values since worker start. Histogram count is the number of observations, not a success count.",
+          "targets": [
+            {
+              "expr": "{__name__=~\"${ucm_prefix}(sglang_connector_load_pages_count|sglang_connector_load_duration_ms_count|sglang_connector_load_bandwidth_gbps_count|sglang_connector_dump_pages_count|sglang_connector_dump_duration_ms_count|sglang_connector_dump_bandwidth_gbps_count)\",job=~\"$job\",instance=~\"$instance\",model_name=~\"$model_name\",worker_id=~\"$worker_id\"}",
+              "legendFormat": "__auto",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No data",
+              "custom": {
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true
+          },
+          "id": 43,
+          "gridPos": {
+            "x": 0,
+            "y": 12,
+            "w": 12,
+            "h": 8
+          }
+        }
+      ],
+      "id": 42,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
         "w": 24,
         "h": 1
       }

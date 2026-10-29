@@ -10,6 +10,7 @@ import torch
 import yaml
 from sglang.srt.distributed.parallel_state import get_world_group
 
+from ucm.integration.sglang.metrics import measure_io
 from ucm.store.factory_v1 import UcmConnectorFactoryV1
 
 if TYPE_CHECKING:
@@ -426,17 +427,26 @@ class SglangUcmConnector:
                 page_results = self._batch_io_flattened_pool(transfer, is_set)
                 results[transfer.name] = page_results
                 continue
-            keys, page_ptrs, _ = self._transfer_meta(transfer)
+            keys, page_ptrs, page_sizes = self._transfer_meta(transfer)
             page_results = [True] * len(keys)
             store, _ = self.pool_components[transfer.name][0]
             encoded = [self._component_key(key, transfer.name, 0) for key in keys]
             try:
-                task = (
-                    store.dump_data(encoded, [0] * len(keys), page_ptrs)
-                    if is_set
-                    else store.load_data(encoded, [0] * len(keys), page_ptrs)
-                )
-                store.wait(task)
+                with measure_io(
+                    self._metrics_logger is not None,
+                    is_set,
+                    len(keys),
+                    lambda: sum(
+                        int(size) for sizes in page_sizes for size in sizes if size > 0
+                    ),
+                ) as observation:
+                    task = (
+                        store.dump_data(encoded, [0] * len(keys), page_ptrs)
+                        if is_set
+                        else store.load_data(encoded, [0] * len(keys), page_ptrs)
+                    )
+                    observation.submitted = True
+                    store.wait(task)
             except RuntimeError as exc:
                 logger.error(
                     "UnifiedCache %s failed for pool %s: %s",
@@ -485,12 +495,19 @@ class SglangUcmConnector:
         encoded = [self._component_key(key, transfer.name, 0) for key in keys]
         pointers = [[page.data_ptr()] for page in staging_pages]
         try:
-            task = (
-                store.dump_data(encoded, [0] * len(keys), pointers)
-                if is_set
-                else store.load_data(encoded, [0] * len(keys), pointers)
-            )
-            store.wait(task)
+            with measure_io(
+                self._metrics_logger is not None,
+                is_set,
+                len(keys),
+                lambda: sum(actual_sizes),
+            ) as observation:
+                task = (
+                    store.dump_data(encoded, [0] * len(keys), pointers)
+                    if is_set
+                    else store.load_data(encoded, [0] * len(keys), pointers)
+                )
+                observation.submitted = True
+                store.wait(task)
         except RuntimeError as exc:
             logger.error(
                 "UnifiedCache %s failed for flattened pool %s: %s",
@@ -665,12 +682,22 @@ class SglangUcmConnector:
         )
 
         store = self._require_primary_store()
-        task = store.load_data(key_list, shard_index_list, ptr_list)
-        try:
-            store.wait(task)
-        except RuntimeError as e:
-            logger.error(f"UnifiedCache load KVCache failed: {e}")
-            return [False] * len(keys)
+        with measure_io(
+            self._metrics_logger is not None,
+            False,
+            len(keys),
+            lambda: (
+                len(keys) * self.page_size * self.mem_pool_host.get_size_per_token()
+            ),
+        ) as observation:
+            task = store.load_data(key_list, shard_index_list, ptr_list)
+            observation.submitted = True
+            try:
+                store.wait(task)
+            except RuntimeError as e:
+                observation.failed = True
+                logger.error(f"UnifiedCache load KVCache failed: {e}")
+                return [False] * len(keys)
 
         return [True] * len(keys)
 
@@ -693,12 +720,22 @@ class SglangUcmConnector:
         )
 
         store = self._require_primary_store()
-        task = store.dump_data(key_list, shard_index_list, ptr_list)
-        try:
-            store.wait(task)
-        except RuntimeError as e:
-            logger.error(f"UnifiedCache dump KVCache failed: {e}")
-            return [False] * len(keys)
+        with measure_io(
+            self._metrics_logger is not None,
+            True,
+            len(keys),
+            lambda: (
+                len(keys) * self.page_size * self.mem_pool_host.get_size_per_token()
+            ),
+        ) as observation:
+            task = store.dump_data(key_list, shard_index_list, ptr_list)
+            observation.submitted = True
+            try:
+                store.wait(task)
+            except RuntimeError as e:
+                observation.failed = True
+                logger.error(f"UnifiedCache dump KVCache failed: {e}")
+                return [False] * len(keys)
 
         return [True] * len(keys)
 

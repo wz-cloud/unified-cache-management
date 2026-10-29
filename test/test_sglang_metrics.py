@@ -192,7 +192,8 @@ def test_multiprocess_environment_errors(tmp_path, early_import):
         code = f'from prometheus_client import Counter\nos.environ["PROMETHEUS_MULTIPROC_DIR"] = {str(tmp_path)!r}\n'
     run_child(
         tmp_path,
-        code + """
+        code
+        + """
 try:
     start()
 except RuntimeError as error:
@@ -268,4 +269,180 @@ def test_lifecycle_creation_failure_hybrid_pools_and_close_failure(tmp_path):
             raise AssertionError("Expected store close failure")
         assert events == ["logger.create", "broken.close", "store.close", "shutdown"]
     """,
+    )
+
+
+IO_BOOTSTRAP = r"""
+import bisect, threading
+from ucm.integration.sglang import metrics as io_metrics
+from ucm.shared.metrics import ucmmetrics
+
+config = yaml.safe_load(Path("examples/metrics/metrics_configs_sglang.yaml").read_text(encoding="utf-8"))
+assert config["consumers"] == {"multiproc": True, "vllm_connector": False}
+config["log_interval"] = 0.01
+write_config()
+lock = threading.Lock()
+observations = []
+defs = {m["name"]: (typ, m) for typ in ("counter", "gauge", "histogram") for m in config[typ]}
+def update(values):
+    with lock:
+        observations.append(dict(values))
+        for name, v in values.items():
+            typ, definition = defs[name]
+            if typ == "counter":
+                snapshot[0][name] = snapshot[0].get(name, 0) + v
+            elif typ == "histogram":
+                bounds = definition["buckets"] + [float("inf")]
+                counts, total = snapshot[2].get(name, ([0] * len(bounds), 0))
+                counts[bisect.bisect_left(bounds, v)] += 1
+                snapshot[2][name] = (counts, total + v)
+def io_drain():
+    with lock:
+        return drain()
+ucmmetrics.update_stats = update
+ucmmetrics.get_all_stats_and_clear = io_drain
+
+class IoStore(Store):
+    phase = None
+    def load_data(self, *args):
+        if self.phase == "submit":
+            raise RuntimeError("submit failed")
+        return object()
+    dump_data = load_data
+    def wait(self, task):
+        if self.phase == "wait":
+            raise RuntimeError("wait failed")
+store = IoStore()
+def make_connector():
+    c.UcmConnectorFactoryV1.create_connector = lambda *args: store
+    connector = start()
+    connector._generate_task = lambda keys, indices: (keys, [0] * len(keys), [[1, 2]] * len(keys))
+    return connector
+def clock_calls(count):
+    # Exactly 10ms per call, independent of the periodic export thread.
+    ticks = iter(v for i in range(count) for v in (i, i + 0.01))
+    io_metrics.time = types.SimpleNamespace(perf_counter=lambda: next(ticks))
+"""
+
+
+def test_io_samples_export_across_tp_pp_workers(tmp_path):
+    for tp, pp in ((0, 0), (1, 1)):
+        run_child(
+            tmp_path,
+            IO_BOOTSTRAP
+            + f"""
+storage.tp_rank, storage.pp_rank, storage.pp_size = {tp}, {pp}, 2
+# Keep PP-scoped test storage paths inside the pytest directory.
+launch["ucm_connector_config"]["storage_backends"] = str(Path(sys.argv[1]) / "store")
+connector = make_connector()
+try:
+    clock_calls(3)
+    assert connector.batch_get_v1(["a", "b"], None) == [True, True]
+    assert connector.batch_get_v1(["c"], None) == [True]
+    assert connector.batch_set_v1(["a", "b"], None) == [True, True]
+    assert len(observations) == 3
+    worker = "dp0_tp{tp}_pp{pp}_attn_cp0"
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        try:
+            if value("ucm:sglang_connector_dump_bytes_total", worker_id=worker) == 256:
+                break
+        except AssertionError:
+            pass
+        time.sleep(0.01)
+    assert value("ucm:sglang_connector_load_requests_total", worker_id=worker) == 2
+    assert value("ucm:sglang_connector_load_pages_count", worker_id=worker) == 2
+    assert value("ucm:sglang_connector_load_pages_sum", worker_id=worker) == 3
+    assert value("ucm:sglang_connector_load_bytes_total", worker_id=worker) == 384
+    assert abs(value("ucm:sglang_connector_load_duration_ms_sum", worker_id=worker) - 20) < 1e-6
+    assert abs(value("ucm:sglang_connector_load_bandwidth_gbps_sum", worker_id=worker) - 384/0.01/1e9) < 1e-12
+    assert value("ucm:sglang_connector_dump_bytes_total", worker_id=worker) == 256
+    # Repeated collection must not replay the same observations.
+    time.sleep(0.03)
+    assert value("ucm:sglang_connector_load_requests_total", worker_id=worker) == 2
+finally:
+    connector.close()
+""",
+        )
+
+
+def test_io_failures_disabled_empty_and_logical_calls(tmp_path):
+    run_child(
+        tmp_path,
+        IO_BOOTSTRAP
+        + r"""
+connector = make_connector()
+try:
+    clock_calls(4)
+    for is_set in (False, True):
+        call = connector.batch_set_v1 if is_set else connector.batch_get_v1
+        prefix = "sglang_connector_dump" if is_set else "sglang_connector_load"
+        store.phase = "submit"
+        try:
+            call(["a"], None)
+        except RuntimeError as exc:
+            assert str(exc) == "submit failed"
+        else:
+            raise AssertionError("submission exception swallowed")
+        assert observations[-1][prefix + "_submit_errors_total"] == 1
+        store.phase = "wait"
+        assert call(["a"], None) == [False]
+        assert observations[-1][prefix + "_wait_errors_total"] == 1
+    assert all(not any(k.endswith(("_bytes_total", "_bandwidth_gbps", "_pages")) for k in v) for v in observations)
+    assert connector.batch_get_v1([], None) == []
+    pool.kv_buffer = None
+    connector.store = None
+    assert connector.batch_get_v1(["a"], None) == [True]
+    assert connector.batch_set_v1(["a"], None) == [True]
+    pool.kv_buffer = object()
+    connector.store = store
+    store.phase = None
+    logger = connector._metrics_logger
+    connector._metrics_logger = None
+    assert connector.batch_get_v1(["a"], None) == [True]
+    connector._metrics_logger = logger
+    assert len(observations) == 4  # No extra clock read or sample for skipped/disabled calls.
+finally:
+    connector.close()
+""",
+    )
+
+
+def test_io_v2_pool_sizes_flattened_and_recording_failure(tmp_path):
+    run_child(
+        tmp_path,
+        IO_BOOTSTRAP
+        + r"""
+connector = make_connector()
+try:
+    clock_calls(5)
+    transfer = types.SimpleNamespace(name="swa", keys=["a", "b"])
+    connector.pool_components["swa"] = [(store, 48)]
+    connector._transfer_meta = lambda t: (t.keys, [[1, 2], [3, 4]], [[48, 48], [48, 48]])
+    assert connector.batch_io_v2([transfer], False) == {"swa": [True, True]}
+    assert observations[-1]["sglang_connector_load_bytes_total"] == 192
+    store.phase = "submit"
+    assert connector.batch_io_v2([transfer], True) == {"swa": [False, False]}
+    assert observations[-1]["sglang_connector_dump_submit_errors_total"] == 1
+    store.phase = None
+    page = types.SimpleNamespace(numel=lambda: 80, element_size=lambda: 1, data_ptr=lambda: 7)
+    restored = []
+    connector.registered_pools["mamba"] = types.SimpleNamespace(
+        page_size=1, get_data_page=lambda *a, **k: page,
+        get_dummy_flat_data_page=lambda: page,
+        set_from_flat_data_page=lambda *a: restored.append(a))
+    connector.pool_components["mamba"] = [(store, 80)]
+    connector.flattened_pools.add("mamba")
+    flat = types.SimpleNamespace(name="mamba", keys=["a"], host_indices=[types.SimpleNamespace(item=lambda: 0)])
+    assert connector.batch_io_v2([flat], True) == {"mamba": [True]}
+    assert observations[-1]["sglang_connector_dump_bytes_total"] == 80
+    assert connector.batch_io_v2([flat], False) == {"mamba": [True]}
+    assert len(restored) == 1
+    assert observations[-1]["sglang_connector_load_bytes_total"] == 80
+    # A telemetry failure must not fail a successful storage operation.
+    ucmmetrics.update_stats = lambda values: (_ for _ in ()).throw(RuntimeError("metrics unavailable"))
+    assert connector.batch_get_v1(["a"], None) == [True]
+finally:
+    connector.close()
+""",
     )
