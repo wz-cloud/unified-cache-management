@@ -19,11 +19,12 @@
     "list": [
       {
         "name": "DS_PROMETHEUS",
-        "label": "Prometheus",
+        "label": "datasource",
         "type": "datasource",
         "query": "prometheus",
         "refresh": 1,
-        "options": []
+        "options": [],
+        "hide": 0
       },
       {
         "name": "sglang_prefix",
@@ -33,7 +34,8 @@
         "current": {
           "text": "sglang:",
           "value": "sglang:"
-        }
+        },
+        "hide": 2
       },
       {
         "name": "ucm_prefix",
@@ -43,7 +45,29 @@
         "current": {
           "text": "ucm:",
           "value": "ucm:"
-        }
+        },
+        "hide": 2
+      },
+      {
+        "name": "model_name",
+        "label": "model_name",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",model_name!=\"\"}, model_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",model_name!=\"\"}, model_name)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": [],
+        "hide": 0
       },
       {
         "name": "job",
@@ -54,10 +78,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\"}, job)",
+          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",model_name=~\"$model_name\"}, job)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\"}, job)",
+        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",model_name=~\"$model_name\"}, job)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -78,34 +102,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\"}, instance)",
+          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",model_name=~\"$model_name\",job=~\"$job\"}, instance)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\"}, instance)",
-        "refresh": 2,
-        "sort": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "options": []
-      },
-      {
-        "name": "model_name",
-        "label": "model_name",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "query": {
-          "query": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\"}, model_name)",
-          "refId": "StandardVariableQuery"
-        },
-        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\"}, model_name)",
+        "definition": "label_values({__name__=~\"${sglang_prefix}.*|${ucm_prefix}.*\",model_name=~\"$model_name\",job=~\"$job\"}, instance)",
         "refresh": 2,
         "sort": 1,
         "multi": true,

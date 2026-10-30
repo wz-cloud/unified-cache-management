@@ -10,7 +10,7 @@ import torch
 import yaml
 from sglang.srt.distributed.parallel_state import get_world_group
 
-from ucm.integration.sglang.metrics import measure_io
+from ucm.integration.sglang.metrics import create_metrics_logger, measure_io
 from ucm.store.factory_v1 import UcmConnectorFactoryV1
 
 if TYPE_CHECKING:
@@ -25,64 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 def _create_metrics_logger(storage_config, launch_config):
-    """One logger per connector, using SGLang's existing multiprocess directory."""
-    if not getattr(storage_config, "enable_storage_metrics", False):
-        return None
-    config_path = launch_config.get("metrics_config_path")
-
-    from ucm.metrics_config import (
-        consumer_enabled,
-        get_metric_definitions,
-        load_metrics_config,
-        metrics_enabled,
-    )
-
-    if not metrics_enabled(launch_config):
-        return None
-    if config_path:
-        config = load_metrics_config(config_path)
-    else:
-        from ucm.integration.sglang.default_metrics_config import (
-            get_default_sglang_metrics_config,
-        )
-
-        config = get_default_sglang_metrics_config()
-    if not get_metric_definitions(config):
-        raise ValueError(f"No UCM metrics defined in {config_path}")
-    if not consumer_enabled(config, "multiproc") or consumer_enabled(
-        config, "vllm_connector"
-    ):
-        raise ValueError(
-            "SGLang metrics config must enable multiproc and disable vllm_connector"
-        )
-    directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
-    if not directory or not Path(directory).is_dir():
-        raise RuntimeError(
-            "SGLang must set PROMETHEUS_MULTIPROC_DIR before UCM metrics"
-        )
-
-    # Import only after SGLang has configured the worker's metrics environment.
-    from prometheus_client import values
-
-    if not getattr(values.ValueClass, "_multiprocess", False):
-        raise RuntimeError(
-            "PROMETHEUS_MULTIPROC_DIR must be set before importing prometheus_client"
-        )
-    from ucm.observability import PrometheusStatsLogger, _metric_mappings
-
-    # The existing logger's registry is process-global. Do not create a second
-    # polling thread, or silently accept its partially initialized early return.
-    if _metric_mappings:
-        raise RuntimeError(
-            "UCM metrics already registered in this worker; only one metrics-enabled "
-            "connector is supported. Restart the worker before recreating it."
-        )
-    worker_id = "_".join(
-        f"{name}{getattr(storage_config, name + '_rank', 0)}"
-        for name in ("dp", "tp", "pp", "attn_cp")
-    )
-    return PrometheusStatsLogger(
-        storage_config.model_name or "", worker_id, config=config
+    return create_metrics_logger(
+        enabled=getattr(storage_config, "enable_storage_metrics", False),
+        model_name=getattr(storage_config, "model_name", ""),
+        ranks={
+            name + "_rank": getattr(storage_config, name + "_rank", 0)
+            for name in ("dp", "tp", "pp", "attn_cp")
+        },
+        launch_config=launch_config,
     )
 
 

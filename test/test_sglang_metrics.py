@@ -392,6 +392,46 @@ finally:
     )
 
 
+def test_linker_async_adapter_exports_through_shared_multiprocess_registry(tmp_path):
+    run_child(
+        tmp_path,
+        IO_BOOTSTRAP
+        + r"""
+import numpy as np
+module("ucm.store.ucmstore_v1", Task=object, UcmKVStoreBaseV1=object)
+from ucm.integration.sglang.ucm_direct_store_adapter import UcmDirectStoreAdapter, UcmLayerTransfer
+
+metrics_logger = io_metrics.create_metrics_logger(
+    enabled=True, model_name="linker-model",
+    ranks={"dp_rank": 1, "tp_rank": 2, "pp_rank": 3, "attn_cp_rank": 0},
+    launch_config=launch)
+adapter = UcmDirectStoreAdapter(connector_name="test", module_path=None, store_config={}, identity={})
+adapter.metrics_enabled = True
+adapter._ensure_store_schema = lambda *a, **kw: store
+transfer = UcmLayerTransfer(
+    store_group="kv", source_pool="kv", pools=("kv",), layers=(0, 1),
+    shard_size=8, tensor_size_list=(8,), page_keys=("a", "b"),
+    addresses=np.array([[[100],[108]],[[200],[208]]], dtype=np.uint64),
+    fragments=((8,0),(8,0)))
+operation = io_metrics.LinkerOperation.begin(True, "offload")
+operation.start()
+tasks = adapter.submit_offload([transfer])
+assert not any("sglang_connector_dump_requests_total" in s for s in observations)
+adapter.wait(tasks)
+operation.finish(True)
+io_metrics.shutdown_metrics_logger(metrics_logger)
+assert not metrics_logger.thread.is_alive()
+labels = {"model_name": "linker-model", "worker_id": "dp1_tp2_pp3_attn_cp0"}
+assert value("ucm:sglang_connector_dump_requests_total", **labels) == 2
+assert value("ucm:sglang_connector_dump_bytes_total", **labels) == 32
+assert value("ucm:sglang_connector_dump_duration_ms_count", **labels) == 2
+assert value("ucm:sglang_linker_offload_completed_total", **labels) == 1
+assert value("ucm:sglang_linker_offload_duration_ms_count", **labels) == 1
+assert "sglang:prefetch_pgs" not in scrape()
+""",
+    )
+
+
 def test_io_samples_export_across_tp_pp_workers(tmp_path):
     for tp, pp in ((0, 0), (1, 1)):
         run_child(

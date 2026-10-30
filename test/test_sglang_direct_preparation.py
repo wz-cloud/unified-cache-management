@@ -8,8 +8,10 @@ import logging
 import re
 import sys
 import threading
+import time
 import types
 import unittest
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, List
@@ -60,9 +62,20 @@ def load_source(relative_path, definitions=None, **dependencies):
     return module
 
 
-adapter_module = load_source("ucm/integration/sglang/ucm_direct_store_adapter.py")
+metrics_module = load_source(
+    "ucm/integration/sglang/metrics.py", contextmanager=contextmanager, time=time
+)
+adapter_module = load_source(
+    "ucm/integration/sglang/ucm_direct_store_adapter.py",
+    AsyncIoObservation=metrics_module.AsyncIoObservation,
+    record_metrics=metrics_module.record_metrics,
+)
 linker_module = load_source(
     "ucm/integration/sglang/ucm_direct_linker.py",
+    LinkerOperation=metrics_module.LinkerOperation,
+    record_metrics=metrics_module.record_metrics,
+    shutdown_metrics_logger=metrics_module.shutdown_metrics_logger,
+    create_metrics_logger=metrics_module.create_metrics_logger,
     **{
         name: getattr(adapter_module, name)
         for name in ("UcmDirectStoreAdapter", "UcmLayerTransfer", "UcmPoolMetadata")

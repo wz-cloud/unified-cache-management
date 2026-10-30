@@ -19,11 +19,12 @@
     "list": [
       {
         "name": "DS_PROMETHEUS",
-        "label": "Prometheus",
+        "label": "datasource",
         "type": "datasource",
         "query": "prometheus",
         "refresh": 1,
-        "options": []
+        "options": [],
+        "hide": 0
       },
       {
         "name": "ucm_prefix",
@@ -33,7 +34,29 @@
         "current": {
           "text": "ucm:",
           "value": "ucm:"
-        }
+        },
+        "hide": 2
+      },
+      {
+        "name": "model_name",
+        "label": "model_name",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values({__name__=~\"${ucm_prefix}.*\",model_name!=\"\"}, model_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "label_values({__name__=~\"${ucm_prefix}.*\",model_name!=\"\"}, model_name)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": [],
+        "hide": 0
       },
       {
         "name": "job",
@@ -44,10 +67,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values({__name__=~\"${ucm_prefix}.*\"}, job)",
+          "query": "label_values({__name__=~\"${ucm_prefix}.*\",model_name=~\"$model_name\"}, job)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values({__name__=~\"${ucm_prefix}.*\"}, job)",
+        "definition": "label_values({__name__=~\"${ucm_prefix}.*\",model_name=~\"$model_name\"}, job)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -68,34 +91,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values({__name__=~\"${ucm_prefix}.*\",job=~\"$job\"}, instance)",
+          "query": "label_values({__name__=~\"${ucm_prefix}.*\",model_name=~\"$model_name\",job=~\"$job\"}, instance)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values({__name__=~\"${ucm_prefix}.*\",job=~\"$job\"}, instance)",
-        "refresh": 2,
-        "sort": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "options": []
-      },
-      {
-        "name": "model_name",
-        "label": "model_name",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "query": {
-          "query": "label_values({__name__=~\"${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\"}, model_name)",
-          "refId": "StandardVariableQuery"
-        },
-        "definition": "label_values({__name__=~\"${ucm_prefix}.*\",job=~\"$job\",instance=~\"$instance\"}, model_name)",
+        "definition": "label_values({__name__=~\"${ucm_prefix}.*\",model_name=~\"$model_name\",job=~\"$job\"}, instance)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -161,7 +160,7 @@
       "title": "About this dashboard",
       "options": {
         "mode": "markdown",
-        "content": "Physical UCM storage calls and backend diagnostics. Connector metrics work across SGLang adapters once instrumented; current collection is implemented for HiCache. Call count and duration include failures; connector pages, bytes and bandwidth describe successful calls only. Per-call GB/s differs from sustained byte throughput. Each TP/PP worker reports its own transferred data. The current adapter selects Posix; other backend rows appear only when those components emit metrics. Store task byte/duration metrics can include failed tasks. Missing series remain No data."
+        "content": "Physical UCM storage calls and backend diagnostics for HiCache and direct Linker. Call count and duration include failures; pages, bytes and bandwidth describe successful calls only. HiCache records per physical pool call; Linker records per pool/layer shard. Neither is inference request count or deduplicated logical page count. Each worker reports its own transferred data. HiCache currently selects Posix; Linker supports its configured pipeline, including Cache|Posix. Cache task completion does not imply downstream Posix persistence. Store task byte/duration metrics can include failed tasks. Multiple Store groups share per-worker Counter/Histogram series; existing same-name Gauges do not identify groups and must not be interpreted as total capacity or all-group health. Shared-resource observations across workers must not be summed blindly. Missing series remain No data."
       },
       "id": 1,
       "gridPos": {
@@ -12624,6 +12623,14 @@
       "type": "link",
       "title": "SGLang + UCM / HiCache",
       "url": "/d/sglang-ucm-hicache",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "type": "link",
+      "title": "SGLang + UCM / Direct Linker",
+      "url": "/d/sglang-ucm-linker",
       "includeVars": true,
       "keepTime": true,
       "targetBlank": false
