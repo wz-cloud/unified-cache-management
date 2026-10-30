@@ -2,7 +2,7 @@ import hashlib
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
@@ -10,6 +10,7 @@ import torch
 import yaml
 from sglang.srt.distributed.parallel_state import get_world_group
 
+from ucm.integration.sglang.metrics import measure_io
 from ucm.store.factory_v1 import UcmConnectorFactoryV1
 
 if TYPE_CHECKING:
@@ -21,6 +22,68 @@ if TYPE_CHECKING:
     from sglang.srt.mem_cache.memory_pool_host import HostKVCache
 
 logger = logging.getLogger(__name__)
+
+
+def _create_metrics_logger(storage_config, launch_config):
+    """One logger per connector, using SGLang's existing multiprocess directory."""
+    if not getattr(storage_config, "enable_storage_metrics", False):
+        return None
+    config_path = launch_config.get("metrics_config_path")
+
+    from ucm.metrics_config import (
+        consumer_enabled,
+        get_metric_definitions,
+        load_metrics_config,
+        metrics_enabled,
+    )
+
+    if not metrics_enabled(launch_config):
+        return None
+    if config_path:
+        config = load_metrics_config(config_path)
+    else:
+        from ucm.integration.sglang.default_metrics_config import (
+            get_default_sglang_metrics_config,
+        )
+
+        config = get_default_sglang_metrics_config()
+    if not get_metric_definitions(config):
+        raise ValueError(f"No UCM metrics defined in {config_path}")
+    if not consumer_enabled(config, "multiproc") or consumer_enabled(
+        config, "vllm_connector"
+    ):
+        raise ValueError(
+            "SGLang metrics config must enable multiproc and disable vllm_connector"
+        )
+    directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
+    if not directory or not Path(directory).is_dir():
+        raise RuntimeError(
+            "SGLang must set PROMETHEUS_MULTIPROC_DIR before UCM metrics"
+        )
+
+    # Import only after SGLang has configured the worker's metrics environment.
+    from prometheus_client import values
+
+    if not getattr(values.ValueClass, "_multiprocess", False):
+        raise RuntimeError(
+            "PROMETHEUS_MULTIPROC_DIR must be set before importing prometheus_client"
+        )
+    from ucm.observability import PrometheusStatsLogger, _metric_mappings
+
+    # The existing logger's registry is process-global. Do not create a second
+    # polling thread, or silently accept its partially initialized early return.
+    if _metric_mappings:
+        raise RuntimeError(
+            "UCM metrics already registered in this worker; only one metrics-enabled "
+            "connector is supported. Restart the worker before recreating it."
+        )
+    worker_id = "_".join(
+        f"{name}{getattr(storage_config, name + '_rank', 0)}"
+        for name in ("dp", "tp", "pp", "attn_cp")
+    )
+    return PrometheusStatsLogger(
+        storage_config.model_name or "", worker_id, config=config
+    )
 
 
 def _load_extra_config_from_yaml_env() -> Optional[Dict[str, Any]]:
@@ -47,6 +110,7 @@ class UnifiedCacheStoreConfig:
     module_path: str
     name: str
     config: Dict[str, Any]
+    launch_config: Dict[str, Any] = field(default_factory=dict)
 
     def fixed_size_config(
         self, namespace: str, tensor_size: int, tensors_per_block: int = 1
@@ -134,7 +198,9 @@ class UnifiedCacheStoreConfig:
         cfg["block_size"] = block_size
         cfg["stream_number"] = 8
 
-        return UnifiedCacheStoreConfig(module_path=module_path, name=name, config=cfg)
+        return UnifiedCacheStoreConfig(
+            module_path=module_path, name=name, config=cfg, launch_config=dict(kvc)
+        )
 
 
 class SglangUcmConnector:
@@ -146,6 +212,8 @@ class SglangUcmConnector:
         storage_backends: List[str],
     ):
         self.store = store
+        self._metrics_logger = None
+        self._closed = False
         self.mem_pool_host = mem_pool_host
         self.storage_backends = storage_backends
 
@@ -184,19 +252,35 @@ class SglangUcmConnector:
         ucm_store_config = UnifiedCacheStoreConfig.load_from_config(
             storage_config, mem_pool_host
         )
-        store = None
-        if getattr(mem_pool_host, "kv_buffer", None) is not None:
-            store = UcmConnectorFactoryV1.create_connector(
-                ucm_store_config.name,
-                ucm_store_config.config,
-                ucm_store_config.module_path,
-            )
-        connector = cls(
-            store,
-            mem_pool_host,
-            storage_config,
-            ucm_store_config.config["storage_backends"],
+        # Register metrics before creating stores: their constructors can emit
+        # resource gauges. One exporter covers all lazily created v2 pools too.
+        metrics_logger = _create_metrics_logger(
+            storage_config, ucm_store_config.launch_config
         )
+        store = None
+        try:
+            if getattr(mem_pool_host, "kv_buffer", None) is not None:
+                store = UcmConnectorFactoryV1.create_connector(
+                    ucm_store_config.name,
+                    ucm_store_config.config,
+                    ucm_store_config.module_path,
+                )
+            connector = cls(
+                store,
+                mem_pool_host,
+                storage_config,
+                ucm_store_config.config["storage_backends"],
+            )
+        except BaseException:
+            try:
+                close = getattr(store, "close", None)
+                if callable(close):
+                    close()
+            finally:
+                if metrics_logger is not None:
+                    metrics_logger.shutdown()
+            raise
+        connector._metrics_logger = metrics_logger
         connector.ucm_store_config = ucm_store_config
         return connector
 
@@ -348,17 +432,26 @@ class SglangUcmConnector:
                 page_results = self._batch_io_flattened_pool(transfer, is_set)
                 results[transfer.name] = page_results
                 continue
-            keys, page_ptrs, _ = self._transfer_meta(transfer)
+            keys, page_ptrs, page_sizes = self._transfer_meta(transfer)
             page_results = [True] * len(keys)
             store, _ = self.pool_components[transfer.name][0]
             encoded = [self._component_key(key, transfer.name, 0) for key in keys]
             try:
-                task = (
-                    store.dump_data(encoded, [0] * len(keys), page_ptrs)
-                    if is_set
-                    else store.load_data(encoded, [0] * len(keys), page_ptrs)
-                )
-                store.wait(task)
+                with measure_io(
+                    self._metrics_logger is not None,
+                    is_set,
+                    len(keys),
+                    lambda: sum(
+                        int(size) for sizes in page_sizes for size in sizes if size > 0
+                    ),
+                ) as observation:
+                    task = (
+                        store.dump_data(encoded, [0] * len(keys), page_ptrs)
+                        if is_set
+                        else store.load_data(encoded, [0] * len(keys), page_ptrs)
+                    )
+                    observation.submitted = True
+                    store.wait(task)
             except RuntimeError as exc:
                 logger.error(
                     "UnifiedCache %s failed for pool %s: %s",
@@ -407,12 +500,19 @@ class SglangUcmConnector:
         encoded = [self._component_key(key, transfer.name, 0) for key in keys]
         pointers = [[page.data_ptr()] for page in staging_pages]
         try:
-            task = (
-                store.dump_data(encoded, [0] * len(keys), pointers)
-                if is_set
-                else store.load_data(encoded, [0] * len(keys), pointers)
-            )
-            store.wait(task)
+            with measure_io(
+                self._metrics_logger is not None,
+                is_set,
+                len(keys),
+                lambda: sum(actual_sizes),
+            ) as observation:
+                task = (
+                    store.dump_data(encoded, [0] * len(keys), pointers)
+                    if is_set
+                    else store.load_data(encoded, [0] * len(keys), pointers)
+                )
+                observation.submitted = True
+                store.wait(task)
         except RuntimeError as exc:
             logger.error(
                 "UnifiedCache %s failed for flattened pool %s: %s",
@@ -493,18 +593,33 @@ class SglangUcmConnector:
         return PoolTransferResult(final_pages, hit_counts, restorable)
 
     def close(self) -> None:
-        seen = set()
-        for store in [self.store] + [
-            store
-            for components in self.pool_components.values()
-            for store, _ in components
-        ]:
-            if id(store) in seen:
-                continue
-            seen.add(id(store))
-            close = getattr(store, "close", None)
-            if callable(close):
-                close()
+        if self._closed:
+            return
+        self._closed = True
+        first_error = None
+        try:
+            seen = set()
+            for store in [self.store] + [
+                store
+                for components in self.pool_components.values()
+                for store, _ in components
+            ]:
+                if id(store) in seen:
+                    continue
+                seen.add(id(store))
+                close = getattr(store, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception as error:
+                        if first_error is None:
+                            first_error = error
+                        logger.exception("Failed to close UCM store")
+        finally:
+            if self._metrics_logger is not None:
+                self._metrics_logger.shutdown()
+        if first_error is not None:
+            raise first_error
 
     def _encode_key(self, key: str) -> bytes:
         return hashlib.md5(key.encode("utf-8")).digest()
@@ -572,12 +687,22 @@ class SglangUcmConnector:
         )
 
         store = self._require_primary_store()
-        task = store.load_data(key_list, shard_index_list, ptr_list)
-        try:
-            store.wait(task)
-        except RuntimeError as e:
-            logger.error(f"UnifiedCache load KVCache failed: {e}")
-            return [False] * len(keys)
+        with measure_io(
+            self._metrics_logger is not None,
+            False,
+            len(keys),
+            lambda: (
+                len(keys) * self.page_size * self.mem_pool_host.get_size_per_token()
+            ),
+        ) as observation:
+            task = store.load_data(key_list, shard_index_list, ptr_list)
+            observation.submitted = True
+            try:
+                store.wait(task)
+            except RuntimeError as e:
+                observation.failed = True
+                logger.error(f"UnifiedCache load KVCache failed: {e}")
+                return [False] * len(keys)
 
         return [True] * len(keys)
 
@@ -600,12 +725,22 @@ class SglangUcmConnector:
         )
 
         store = self._require_primary_store()
-        task = store.dump_data(key_list, shard_index_list, ptr_list)
-        try:
-            store.wait(task)
-        except RuntimeError as e:
-            logger.error(f"UnifiedCache dump KVCache failed: {e}")
-            return [False] * len(keys)
+        with measure_io(
+            self._metrics_logger is not None,
+            True,
+            len(keys),
+            lambda: (
+                len(keys) * self.page_size * self.mem_pool_host.get_size_per_token()
+            ),
+        ) as observation:
+            task = store.dump_data(key_list, shard_index_list, ptr_list)
+            observation.submitted = True
+            try:
+                store.wait(task)
+            except RuntimeError as e:
+                observation.failed = True
+                logger.error(f"UnifiedCache dump KVCache failed: {e}")
+                return [False] * len(keys)
 
         return [True] * len(keys)
 
