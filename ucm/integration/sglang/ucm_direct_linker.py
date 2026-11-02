@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import threading
 import time
 from collections import OrderedDict, deque
@@ -330,9 +329,7 @@ class UcmDirectLinker(UnifiedCacheLinker):
             "rank_replicated": self.pool_group.rank_replicated,
             "device_id": int(device_module.current_device()),
         }
-        config = dict(extra_config or {})
-        config.setdefault("config_file", os.environ.get("UNIFIEDCACHE_CONFIG_FILE"))
-        return UcmDirectStoreAdapter.from_config(config, identity)
+        return UcmDirectStoreAdapter.from_config(extra_config or {}, identity)
 
     def _pool_metadata(self) -> list[UcmPoolMetadata]:
         metadata = []
@@ -659,28 +656,29 @@ class UcmDirectLinker(UnifiedCacheLinker):
         ):
             resume_from_pages = previous.hit_pages
         started = time.perf_counter() if self._metrics_enabled else None
+        lookup_succeeded = False
         try:
             result = self.adapter.lookup(
                 lookup_transfers,
                 page_keys,
                 resume_from_pages=resume_from_pages,
             )
-        except BaseException:
-            self._record_metrics(lookup_errors_total=1)
-            raise
-        else:
-            # Local restorable boundary, not final cross-rank token reuse.
-            self._record_metrics(
-                lookup_query_pages_total=len(page_keys),
-                lookup_hit_pages_total=result[-1] if result else 0,
-            )
+            lookup_succeeded = True
         finally:
             if started is not None:
-                self._record_metrics(
-                    lookup_requests_total=1,
-                    lookup_resumed_total=int(resume_from_pages > 0),
-                    lookup_duration_ms=(time.perf_counter() - started) * 1000,
-                )
+                # Capture adapter latency before constructing or recording metrics.
+                values = {
+                    "lookup_duration_ms": (time.perf_counter() - started) * 1000,
+                    "lookup_requests_total": 1,
+                    "lookup_resumed_total": int(resume_from_pages > 0),
+                }
+                if lookup_succeeded:
+                    # Local restorable boundary, not final cross-rank token reuse.
+                    values["lookup_query_pages_total"] = len(page_keys)
+                    values["lookup_hit_pages_total"] = result[-1] if result else 0
+                else:
+                    values["lookup_errors_total"] = 1
+                self._record_metrics(**values)
         self._lookup_progress[rid] = _LookupProgress(
             tuple(page_keys), transfer_keys, result[-1] if result else 0
         )

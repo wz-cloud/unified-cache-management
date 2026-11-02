@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 import test_sglang_direct_preparation as preparation
 import yaml
-from test_sglang_direct_preparation import (
+from common.sglang_utils import (
     adapter_module,
     linker_module,
     metrics_module,
@@ -166,6 +166,41 @@ class LinkerMetricsTest(unittest.TestCase):
         self.assertEqual(self.total("sglang_linker_lookup_errors_total"), 1)
         self.assertEqual(self.total("sglang_linker_lookup_requests_total"), 1)
         self.assertEqual(self.total("sglang_linker_lookup_query_pages_total"), 0)
+        self.assertEqual(len(self.samples), 1)
+        self.assertNotIn("r", obj._lookup_progress)
+
+    def test_lookup_records_one_batch_without_including_export_time(self):
+        obj, transfers = self.lookup_linker()
+
+        def lookup(*args, **kwargs):
+            self.now += 0.25
+            return [2, 4]
+
+        def record(values):
+            self.samples.append(values)
+            self.now += 1
+
+        obj.adapter.lookup.side_effect = lookup
+        with patch.object(linker_module, "record_metrics", record):
+            self.assertEqual(obj.lookup("r", transfers), [2, 4])
+        self.assertEqual(len(self.samples), 1)
+        self.assertEqual(self.total("sglang_linker_lookup_duration_ms"), 250)
+        self.assertEqual(self.total("sglang_linker_lookup_query_pages_total"), 4)
+        self.assertEqual(self.total("sglang_linker_lookup_hit_pages_total"), 4)
+        self.assertEqual(obj._lookup_progress["r"].hit_pages, 4)
+
+    def test_disabled_lookup_preserves_result_without_clock_or_samples(self):
+        obj, transfers = self.lookup_linker()
+        obj._metrics_enabled = False
+        with patch.object(
+            linker_module.time, "perf_counter", side_effect=AssertionError("clock")
+        ):
+            self.assertEqual(obj.lookup("r", transfers), [2, 4])
+            obj.adapter.lookup.side_effect = RuntimeError("lookup")
+            with self.assertRaisesRegex(RuntimeError, "lookup"):
+                obj.lookup("failed", transfers)
+        self.assertEqual(self.samples, [])
+        self.assertNotIn("failed", obj._lookup_progress)
 
     def test_resume_fallback_records_actual_probe(self):
         self.store.lookup_on_prefix = Mock(side_effect=[-1, 1])
@@ -226,7 +261,7 @@ class LinkerMetricsTest(unittest.TestCase):
         )
         adapter = adapter_module.UcmDirectStoreAdapter.from_config(
             {
-                "config_file": "config.yaml",
+                "UCM_CONFIG_FILE": "config.yaml",
                 "enable_metrics": False,
                 "metrics_config_path": "new.yaml",
             },

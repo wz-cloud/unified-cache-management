@@ -8,7 +8,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from test_sglang_direct_preparation import linker_module, metrics_module
+from common.sglang_utils import linker_module, metrics_module
 
 linker_module.deque = collections.deque
 linker_module.Empty = queue.Empty
