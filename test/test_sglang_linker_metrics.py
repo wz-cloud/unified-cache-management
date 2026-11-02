@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 import test_sglang_direct_preparation as preparation
 import yaml
-from test_sglang_direct_preparation import (
+from common.sglang_utils import (
     adapter_module,
     linker_module,
     metrics_module,
@@ -226,7 +226,7 @@ class LinkerMetricsTest(unittest.TestCase):
         )
         adapter = adapter_module.UcmDirectStoreAdapter.from_config(
             {
-                "config_file": "config.yaml",
+                "UCM_CONFIG_FILE": "config.yaml",
                 "enable_metrics": False,
                 "metrics_config_path": "new.yaml",
             },
