@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import types
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, List
 
@@ -44,6 +44,7 @@ def _load_source(relative_path, definitions=None, **dependencies):
 def load_source(relative_path, definitions=None, **dependencies):
     defaults = dict(
         dataclass=dataclass,
+        field=field,
         replace=replace,
         np=np,
         copy=copy,
